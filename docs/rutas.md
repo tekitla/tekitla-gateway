@@ -15,6 +15,21 @@
    `Register...Handler` generada y nombre del upstream → `UPSTREAM_<NAME>_ADDR`).
 3. **Autorización**: `routes.yaml`, **denegar por defecto**.
 
+## Rutas de Tequio (rebanada 1)
+
+Las 6 de `issues.v1.IssueService` (tequio-protos `v0.1.0`), todas con
+`roles: [allowlist]` (docs/auth.md). Lecturas: bucket global (600/min, ráfaga
+100). Escrituras: body ≤ 64 KiB, timeout 5 s y bucket propio por usuario.
+
+| Método | Ruta | Rate limit |
+|---|---|---|
+| `ListProjects` | `GET /v1/projects` | global |
+| `CreateProject` | `POST /v1/projects` | 30/min, ráfaga 10 |
+| `ListIssues` | `GET /v1/projects/{project_id}/issues` | global |
+| `GetIssue` | `GET /v1/projects/{project_id}/issues/{number}` | global |
+| `CreateIssue` | `POST /v1/projects/{project_id}/issues` | 60/min, ráfaga 20 |
+| `MoveIssue` | `POST /v1/projects/{project_id}/issues/{number}:move` | 120/min, ráfaga 30 |
+
 ## routes.yaml
 
 Clave = método gRPC completo (`<paquete>.<Servicio>/<Método>`). Cada entrada
@@ -39,7 +54,7 @@ autorizó la tabla; si no coincide, la llamada no sale (500).
 ### Agregar una ruta
 
 1. **Repo de protos**: el RPC con su anotación, p. ej.
-   `option (google.api.http) = {post: "/v1/items/{id}:archive" body: "*"};`.
+   `option (google.api.http) = {post: "/v1/projects/{project_id}:archive" body: "*"};`.
    Rutas de administración bajo un prefijo propio (`/v1/admin/...`).
    `make generate` regenera `*.pb.gw.go` y `gen/openapi/api.swagger.json`;
    release del repo de protos.

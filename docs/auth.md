@@ -19,7 +19,7 @@ servicios confían en esta metadata **porque solo el gateway puede llamarlos**
 (red interna de Docker, sin puertos publicados).
 
 Respuestas: sin credencial o credencial inválida en una ruta protegida → `401`;
-credencial válida sin el rol → `403`; proveedor de claves caído → `503`. En
+credencial válida sin el rol (en Tequio: email fuera de la allowlist) → `403`; proveedor de claves caído → `503`. En
 rutas `public: true` una credencial válida se usa (identidad y rate limit por
 usuario) y una inválida se ignora.
 
@@ -36,6 +36,48 @@ usuario) y una inválida se ignora.
 Variables: `FIREBASE_PROJECT_ID` (default `tequio-app-435b4`; QA y prod
 suelen ser proyectos distintos: cada entorno pone el suyo) y
 `AUTH_ROLES_CLAIM` (default `roles`).
+
+## Allowlist de emails (Tequio, rebanada 1)
+
+Un solo dueño, sin roles propios: **todas** las rutas de `routes.yaml` piden
+`roles: [allowlist]`. Ese rol no lo pone Firebase: lo agrega
+`auth.EmailAllowlist` (`app/auth/allowlist.go`), que envuelve al verificador,
+solo si el ID token (ya validado) trae:
+
+- `email_verified: true` (booleano), y
+- `email` en `AUTH_ALLOWED_EMAILS` (separados por coma, sin distinguir
+  mayúsculas ni espacios).
+
+| Caso | Resultado |
+|---|---|
+| Sin token / token inválido o vencido | `401` |
+| Token válido, email en la lista y verificado | pasa (`x-roles` incluye `allowlist`) |
+| Email fuera de la lista, sin verificar o sin claim `email` | `403` |
+| Un custom claim `roles: [allowlist]` | se **descarta**: el rol solo sale de la lista |
+| `AUTH_ALLOWED_EMAILS` vacía | `403` para todos (fail closed) + warning al arrancar |
+| Entrada mal formada (sin `@`, con espacios...) | el gateway no arranca |
+
+Con login de Google el email viene verificado. El email no viaja a los
+servicios (solo `x-user-id` = `uid` de Firebase) ni se escribe en los logs.
+Para sumar a alguien: agregar su email a la variable y redeploy. Cuando haya
+más de un usuario con permisos distintos, pasar a roles por custom claims
+(abajo) y dejar la allowlist como filtro de acceso o retirarla.
+
+## Pruebas locales sin tokens reales (`FIREBASE_JWKS_URL`)
+
+Firebase no emite ID tokens para pruebas automatizadas (y el emulador de Auth
+los firma con `alg: none`, que el gateway rechaza siempre). Para un e2e local:
+un emisor de prueba firma tokens RS256 con `iss`
+`https://securetoken.google.com/<FIREBASE_PROJECT_ID>`, `aud`
+`<FIREBASE_PROJECT_ID>`, `auth_time`, `email` y `email_verified`, y publica su
+JWKS; el gateway se levanta con `FIREBASE_JWKS_URL=<url del JWKS>`. Todas las
+demás validaciones son las mismas. Solo se admite con `APP_ENV=development`
+(con cualquier otro valor el gateway no arranca) y loguea un warning. Nunca
+en QA ni prod: `docker-compose.coolify.yml` ni siquiera la pasa.
+
+Los tests de Go usan lo mismo (`app/auth/authtest`).
+
+## Roles por custom claims (no usados en la rebanada 1)
 
 **Roles** = custom claims. Se setean desde un backend con el Admin SDK (nunca
 desde el cliente), y el usuario los ve en el próximo ID token (≤ 1 h, o
