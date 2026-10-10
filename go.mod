@@ -6,7 +6,7 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.5
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.31.0
 	github.com/joho/godotenv v1.5.1
-	github.com/tekitla/tekitla-protos v0.1.1
+	github.com/tekitla/tekitla-protos v0.2.0
 	go.yaml.in/yaml/v3 v3.0.5
 	google.golang.org/api v0.295.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260921155816-b14227669459
