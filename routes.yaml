@@ -33,26 +33,51 @@
 
 version: 1
 
+# Tequio, rebanada 1 (issue 002): un solo dueño. Todas las rutas exigen el rol
+# `allowlist`, que el gateway NO lee del token: lo otorga solo a quien tiene el
+# email verificado en AUTH_ALLOWED_EMAILS (app/auth/allowlist.go; docs/auth.md).
+# Nada es público salvo /healthz y /readyz (fuera del mux).
+
 defaults:
   timeout: 10s
   max_body_bytes: 1048576   # 1 MiB
+  # Lecturas (GET): comparten este bucket por usuario.
   rate_limit:
     per_minute: 600
     burst: 100
 
 routes:
-  # Listado público (ejemplo de ruta abierta).
-  example.v1.ItemService/ListItems:
-    public: true
+  # --- Lecturas --------------------------------------------------------------
+  issues.v1.IssueService/ListProjects:
+    roles: [allowlist]
 
-  example.v1.ItemService/GetItem:
-    roles: [items.read, items.admin]
+  issues.v1.IssueService/ListIssues:
+    roles: [allowlist]
 
-  # Escritura: rol propio, body chico y límite más estricto que el global.
-  example.v1.ItemService/CreateItem:
-    roles: [items.write, items.admin]
+  issues.v1.IssueService/GetIssue:
+    roles: [allowlist]
+
+  # --- Escrituras (POST): body chico, timeout corto y bucket propio ----------
+  issues.v1.IssueService/CreateProject:
+    roles: [allowlist]
     timeout: 5s
     max_body_bytes: 65536
     rate_limit:
       per_minute: 30
       burst: 10
+
+  issues.v1.IssueService/CreateIssue:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 60
+      burst: 20
+
+  issues.v1.IssueService/MoveIssue:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 120
+      burst: 30

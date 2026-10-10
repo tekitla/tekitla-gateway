@@ -29,7 +29,8 @@ services:
       SERVICE_ENV: ${SERVICE_ENV:-production}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       HTTP_PORT: "8080"
-      UPSTREAM_ITEMS_ADDR: ${UPSTREAM_ITEMS_ADDR:?}
+      # Nombre de contenedor de tequio-issues en la red predefinida + :5000.
+      UPSTREAM_ISSUES_ADDR: ${UPSTREAM_ISSUES_ADDR:?}
       UPSTREAM_TLS: "false"
       UPSTREAM_AUTH: none
       # Orígenes EXACTOS del front de este entorno, separados por coma.
@@ -37,6 +38,9 @@ services:
       TRUSTED_PROXY_HOPS: "1"
       OPENAPI_ENABLED: ${OPENAPI_ENABLED:-false}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:?}
+      # Emails verificados que pueden usar la API, separados por coma
+      # (obligatoria: sin ella nadie entraría). FIREBASE_JWKS_URL no va acá.
+      AUTH_ALLOWED_EMAILS: ${AUTH_ALLOWED_EMAILS:?}
     expose:
       - "8080"
     healthcheck:

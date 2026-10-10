@@ -8,9 +8,12 @@
 # El Dockerfile compila con -mod=vendor (offline): sin `go mod vendor` previo
 # el build falla. `make up` lo hace solo.
 #
-# Upstreams: por default el gateway busca los servicios en la máquina host
-# (host.docker.internal), p. ej. un go-grpc-service levantado con su propio
-# `make up` en el puerto 5000. Para otra dirección: UPSTREAM_ITEMS_ADDR=... make up
+# Upstreams: por default el gateway busca tequio-issues en la máquina host
+# (host.docker.internal:5000), levantado con `make up` en su repo (publica el
+# puerto 5000). Para otra dirección: UPSTREAM_ISSUES_ADDR=... make up
+#
+# Allowlist: AUTH_ALLOWED_EMAILS=tu-email@ejemplo.com make up (vacía = 403
+# para todos).
 #
 # Mismas variables de entorno que en Coolify; solo cambian los valores
 # (lista completa: .env.example).
@@ -32,13 +35,16 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-debug}
       LOG_FORMAT: json
       HTTP_PORT: "8080"
-      UPSTREAM_ITEMS_ADDR: ${UPSTREAM_ITEMS_ADDR:-host.docker.internal:5000}
+      UPSTREAM_ISSUES_ADDR: ${UPSTREAM_ISSUES_ADDR:-host.docker.internal:5000}
       UPSTREAM_TLS: "false"
       UPSTREAM_AUTH: none
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:4200}
       TRUSTED_PROXY_HOPS: "0"
       OPENAPI_ENABLED: "true"
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-tequio-app-435b4}
+      AUTH_ALLOWED_EMAILS: ${AUTH_ALLOWED_EMAILS:-}
+      # Solo desarrollo: JWKS de un emisor de prueba (ver .env.example).
+      FIREBASE_JWKS_URL: ${FIREBASE_JWKS_URL:-}
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     healthcheck:

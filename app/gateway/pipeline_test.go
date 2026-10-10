@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/vrojas1015/tequio-gateway/app/apierror"
+	"github.com/vrojas1015/tequio-gateway/app/auth"
 	"github.com/vrojas1015/tequio-gateway/app/gateway"
 	"github.com/vrojas1015/tequio-gateway/app/ratelimit"
 	"github.com/vrojas1015/tequio-gateway/app/routes"
@@ -70,7 +71,7 @@ func TestRutaSinDeclararEs404(t *testing.T) {
 	}
 	e := newEnv(t, full.Without(plain.Method))
 	method, path, body := request(plain)
-	n, v := e.creds.header("u-admin", "items.admin")
+	n, v := e.creds.header("u-admin", auth.AllowlistRole)
 	w := e.do(method, path, body, n, v)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("ruta sin declarar: %d, esperaba 404", w.Code)
@@ -330,12 +331,13 @@ func TestRequestIDEIdentidadHaciaElServicio(t *testing.T) {
 
 func TestLogsSinSecretos(t *testing.T) {
 	e := newEnv(t, nil)
-	n, v := e.creds.header("u-logs", "items.admin")
+	n, v := e.creds.header("u-logs", auth.AllowlistRole)
 	if n == "" { // auth = ninguno: igual se manda un token para ver que no se loguee
 		n, v = "Authorization", "Bearer token-que-no-puede-aparecer"
 	}
 	extra := []string{"Cookie", "session=cookie-secreta"}
-	secrets := []string{v, "cookie-secreta", "secreto-en-query"}
+	// El email del token (dato personal) tampoco puede aparecer en los logs.
+	secrets := []string{v, "cookie-secreta", "secreto-en-query", testAllowedEmail}
 	if strings.EqualFold(n, "X-API-Key") {
 		extra = append(extra, "Authorization", "Bearer token-secreto-extra")
 		secrets = append(secrets, "token-secreto-extra")

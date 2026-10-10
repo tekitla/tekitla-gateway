@@ -10,7 +10,7 @@ IMAGE ?= tequio-gateway:local
 GOVULNCHECK_VERSION := v1.8.0
 TRIVY_IMAGE := aquasec/trivy:0.74.0
 
-.PHONY: help run build test test-race vet fmt lint vuln tidy vendor proto image scan up down logs clean workspace workspace-off
+.PHONY: help run build test test-race vet fmt lint vuln tidy vendor image scan up down logs clean workspace workspace-off
 
 ## help: lista los targets
 help:
@@ -56,10 +56,6 @@ tidy:
 ## vendor: genera vendor/ (para el build de la imagen; la CI lo genera sola)
 vendor:
 	go mod vendor
-
-## proto: regenera gen/ desde proto/ (solo mientras use el proto de ejemplo local)
-proto:
-	buf generate
 
 ## image: construye la imagen local ($(IMAGE))
 image: vendor

@@ -109,7 +109,8 @@ func fromRule(method string, rule *annotations.HttpRule) ([]Binding, error) {
 }
 
 // SamplePath arma un path concreto que matchea el template (para los tests
-// generados desde la tabla de rutas): cada variable o comodín pasa a "x".
+// generados desde la tabla de rutas): cada variable o comodín pasa a "1",
+// que el mux acepta tanto en campos string como numéricos (int64, uint32...).
 func (b Binding) SamplePath() string {
 	tpl := b.Template
 	verb := ""
@@ -124,13 +125,13 @@ func (b Binding) SamplePath() string {
 			end := strings.IndexByte(tpl[i:], '}')
 			inner := tpl[i+1 : i+end]
 			if _, sub, ok := strings.Cut(inner, "="); ok {
-				sb.WriteString(strings.NewReplacer("**", "x", "*", "x").Replace(sub))
+				sb.WriteString(strings.NewReplacer("**", "1", "*", "1").Replace(sub))
 			} else {
-				sb.WriteString("x")
+				sb.WriteString("1")
 			}
 			i += end
 		case '*':
-			sb.WriteString("x")
+			sb.WriteString("1")
 			if i+1 < len(tpl) && tpl[i+1] == '*' {
 				i++
 			}

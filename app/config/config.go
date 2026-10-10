@@ -47,6 +47,13 @@ type Config struct {
 	ClockSkew         time.Duration
 	APIKeys           string // contenido (YAML/JSON), típicamente desde un secreto
 	APIKeysFile       string // o ruta a un archivo montado
+
+	// FirebaseJWKSURL reemplaza el JWKS de securetoken SOLO en desarrollo
+	// (pruebas de punta a punta con un emisor de prueba): exige APP_ENV=development.
+	FirebaseJWKSURL string
+	// AllowedEmails: emails verificados que pueden usar la API (rebanada 1).
+	// Vacía = nadie entra (fail closed).
+	AllowedEmails []string
 }
 
 // IsProduction informa si APP_ENV=production.
@@ -94,6 +101,8 @@ func Load() (*Config, error) {
 		UpstreamAuth: getEnv("UPSTREAM_AUTH", "none"),
 
 		FirebaseProjectID: getEnv("FIREBASE_PROJECT_ID", "tequio-app-435b4"),
+		FirebaseJWKSURL:   os.Getenv("FIREBASE_JWKS_URL"),
+		AllowedEmails:     splitList(os.Getenv("AUTH_ALLOWED_EMAILS")),
 		OIDCIssuer:        getEnv("OIDC_ISSUER", ""),
 		OIDCAudience:      getEnv("OIDC_AUDIENCE", ""),
 		RolesClaim:        getEnv("AUTH_ROLES_CLAIM", "roles"),
@@ -110,6 +119,9 @@ func Load() (*Config, error) {
 	}
 	if c.ClockSkew < 0 || c.ClockSkew > 60*time.Second {
 		errs = append(errs, errors.New("AUTH_CLOCK_SKEW tiene que estar entre 0s y 60s"))
+	}
+	if c.FirebaseJWKSURL != "" && c.AppEnv != "development" {
+		errs = append(errs, errors.New("FIREBASE_JWKS_URL es solo para desarrollo: exige APP_ENV=development"))
 	}
 	if c.LogFormat != "json" && c.LogFormat != "text" {
 		errs = append(errs, fmt.Errorf("LOG_FORMAT=%q (json | text)", c.LogFormat))

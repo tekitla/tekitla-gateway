@@ -123,7 +123,15 @@ func (v *JWTVerifier) Verify(ctx context.Context, raw string) (*Identity, error)
 			return nil, fmt.Errorf("%w: %v", ErrInvalidCredentials, err)
 		}
 	}
-	return &Identity{Subject: std.Subject, Roles: rolesFrom(all, v.opts.RolesClaim), Kind: "jwt"}, nil
+	email, _ := all["email"].(string)
+	verified, _ := all["email_verified"].(bool)
+	return &Identity{
+		Subject:       std.Subject,
+		Roles:         rolesFrom(all, v.opts.RolesClaim),
+		Kind:          "jwt",
+		Email:         email,
+		EmailVerified: verified,
+	}, nil
 }
 
 func bearerToken(r *http.Request) (string, error) {
