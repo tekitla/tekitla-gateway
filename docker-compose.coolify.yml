@@ -1,5 +1,5 @@
 # =============================================================================
-# Coolify v4 (build pack "Docker Compose") — tequio-gateway
+# Coolify v4 (build pack "Docker Compose") — tekitla-gateway
 # =============================================================================
 #
 # Un recurso de Coolify por entorno (QA y prod), los dos con este archivo.
@@ -21,7 +21,7 @@
 
 services:
   gateway:
-    image: ${IMAGE_REPO:-ghcr.io/vrojas1015/tequio-gateway}:${IMAGE_TAG:?}
+    image: ${IMAGE_REPO:-ghcr.io/tekitla/tekitla-gateway}:${IMAGE_TAG:?}
     pull_policy: always
     restart: unless-stopped
     environment:
@@ -29,7 +29,7 @@ services:
       SERVICE_ENV: ${SERVICE_ENV:-production}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       HTTP_PORT: "8080"
-      # Nombre de contenedor de tequio-issues en la red predefinida + :5000.
+      # Nombre de contenedor de tekitla-issues en la red predefinida + :5000.
       UPSTREAM_ISSUES_ADDR: ${UPSTREAM_ISSUES_ADDR:?}
       UPSTREAM_TLS: "false"
       UPSTREAM_AUTH: none
@@ -45,7 +45,7 @@ services:
       - "8080"
     healthcheck:
       # Imagen distroless (sin shell ni curl): el binario consulta su /healthz.
-      test: ["CMD", "/app/tequio-gateway", "healthcheck"]
+      test: ["CMD", "/app/tekitla-gateway", "healthcheck"]
       interval: 15s
       timeout: 5s
       retries: 5

@@ -14,11 +14,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/vrojas1015/tequio-gateway/app/apierror"
-	"github.com/vrojas1015/tequio-gateway/app/auth"
-	"github.com/vrojas1015/tequio-gateway/app/gateway"
-	"github.com/vrojas1015/tequio-gateway/app/ratelimit"
-	"github.com/vrojas1015/tequio-gateway/app/routes"
+	"github.com/tekitla/tekitla-gateway/app/apierror"
+	"github.com/tekitla/tekitla-gateway/app/auth"
+	"github.com/tekitla/tekitla-gateway/app/gateway"
+	"github.com/tekitla/tekitla-gateway/app/ratelimit"
+	"github.com/tekitla/tekitla-gateway/app/routes"
 )
 
 // Los tests del pipeline arman tablas propias con los métodos que existan en

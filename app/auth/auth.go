@@ -9,7 +9,7 @@
 //   - APIKeys: header X-API-Key contra hashes SHA-256 con scopes.
 //   - None: sin auth (todas las rutas tienen que ser públicas).
 //   - EmailAllowlist: envuelve a otro y otorga el rol AllowlistRole solo a
-//     los emails verificados de una lista (Tequio, rebanada 1).
+//     los emails verificados de una lista (Tekitla, rebanada 1).
 //
 // Cuál se usa lo decide la respuesta `auth` de la plantilla (cli/main.go).
 package auth

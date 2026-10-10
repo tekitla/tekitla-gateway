@@ -1,4 +1,4 @@
-# Autenticación — tequio-gateway (auth: `firebase`)
+# Autenticación — tekitla-gateway (auth: `firebase`)
 
 El gateway **verifica** credenciales; no las emite ni las renueva (eso es del
 proveedor o de un servicio de auth propio). Con una credencial válida arma la
@@ -19,7 +19,7 @@ servicios confían en esta metadata **porque solo el gateway puede llamarlos**
 (red interna de Docker, sin puertos publicados).
 
 Respuestas: sin credencial o credencial inválida en una ruta protegida → `401`;
-credencial válida sin el rol (en Tequio: email fuera de la allowlist) → `403`; proveedor de claves caído → `503`. En
+credencial válida sin el rol (en Tekitla: email fuera de la allowlist) → `403`; proveedor de claves caído → `503`. En
 rutas `public: true` una credencial válida se usa (identidad y rate limit por
 usuario) y una inválida se ignora.
 
@@ -33,11 +33,11 @@ usuario) y una inválida se ignora.
 | Claves | `https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com` (JWKS en caché según `Cache-Control`; refresco ante `kid` desconocido, máx. uno cada 30 s) |
 | Además | `exp`, `nbf`, `iat` con tolerancia `AUTH_CLOCK_SKEW` (≤ 60 s), `sub` no vacío, `auth_time` en el pasado |
 
-Variables: `FIREBASE_PROJECT_ID` (default `tequio-app-435b4`; QA y prod
+Variables: `FIREBASE_PROJECT_ID` (default `tekitla-app`; QA y prod
 suelen ser proyectos distintos: cada entorno pone el suyo) y
 `AUTH_ROLES_CLAIM` (default `roles`).
 
-## Allowlist de emails (Tequio, rebanada 1)
+## Allowlist de emails (Tekitla, rebanada 1)
 
 Un solo dueño, sin roles propios: **todas** las rutas de `routes.yaml` piden
 `roles: [allowlist]`. Ese rol no lo pone Firebase: lo agrega

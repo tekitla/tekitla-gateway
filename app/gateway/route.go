@@ -13,11 +13,11 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 
-	"github.com/vrojas1015/tequio-gateway/app/apierror"
-	"github.com/vrojas1015/tequio-gateway/app/auth"
-	"github.com/vrojas1015/tequio-gateway/app/ratelimit"
-	"github.com/vrojas1015/tequio-gateway/app/reqctx"
-	"github.com/vrojas1015/tequio-gateway/app/routes"
+	"github.com/tekitla/tekitla-gateway/app/apierror"
+	"github.com/tekitla/tekitla-gateway/app/auth"
+	"github.com/tekitla/tekitla-gateway/app/ratelimit"
+	"github.com/tekitla/tekitla-gateway/app/reqctx"
+	"github.com/tekitla/tekitla-gateway/app/routes"
 )
 
 // routeMiddleware corre dentro del mux de grpc-gateway, cuando ya se sabe qué

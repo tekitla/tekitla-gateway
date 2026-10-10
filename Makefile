@@ -1,11 +1,11 @@
-# Makefile de tequio-gateway
+# Makefile de tekitla-gateway
 .DEFAULT_GOAL := help
 
 # Checkout local del repo de protos (para `make workspace`).
-PROTOS_DIR ?= ../tequio-protos
+PROTOS_DIR ?= ../tekitla-protos
 
-BIN := bin/tequio-gateway
-IMAGE ?= tequio-gateway:local
+BIN := bin/tekitla-gateway
+IMAGE ?= tekitla-gateway:local
 # Versiones fijadas de las herramientas de seguridad (las mismas que la CI).
 GOVULNCHECK_VERSION := v1.8.0
 TRIVY_IMAGE := aquasec/trivy:0.74.0
@@ -84,7 +84,7 @@ logs:
 clean:
 	rm -rf bin vendor image.tar
 
-## workspace: apunta github.com/vrojas1015/tequio-protos al checkout local para co-desarrollar protos.
+## workspace: apunta github.com/tekitla/tekitla-protos al checkout local para co-desarrollar protos.
 ## go.work está en .gitignore: es una preferencia de cada dev, no del repo.
 workspace:
 	@test -d $(PROTOS_DIR) || { echo "No existe $(PROTOS_DIR). Clonalo al lado de este repo o pasá PROTOS_DIR=..."; exit 1; }
@@ -94,4 +94,4 @@ workspace:
 ## workspace-off: descarta el workspace local
 workspace-off:
 	@rm -f go.work go.work.sum
-	@echo "go.work eliminado. github.com/vrojas1015/tequio-protos se resuelve desde el remoto."
+	@echo "go.work eliminado. github.com/tekitla/tekitla-protos se resuelve desde el remoto."

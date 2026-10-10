@@ -8,8 +8,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/vrojas1015/tequio-gateway/app/auth"
-	"github.com/vrojas1015/tequio-gateway/app/reqctx"
+	"github.com/tekitla/tekitla-gateway/app/auth"
+	"github.com/tekitla/tekitla-gateway/app/reqctx"
 )
 
 func TestOutgoingSoloParaLaRutaAutorizada(t *testing.T) {

@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/vrojas1015/tequio-gateway/app/reqctx"
+	"github.com/tekitla/tekitla-gateway/app/reqctx"
 )
 
 // HeaderRequestID es el header de entrada/salida del request-id. Hacia los

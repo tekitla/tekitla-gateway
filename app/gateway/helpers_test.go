@@ -22,13 +22,13 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/vrojas1015/tequio-gateway/app/auth"
-	"github.com/vrojas1015/tequio-gateway/app/auth/authtest"
-	"github.com/vrojas1015/tequio-gateway/app/gateway"
-	"github.com/vrojas1015/tequio-gateway/app/middleware"
-	"github.com/vrojas1015/tequio-gateway/app/ratelimit"
-	"github.com/vrojas1015/tequio-gateway/app/routes"
-	"github.com/vrojas1015/tequio-gateway/app/upstream"
+	"github.com/tekitla/tekitla-gateway/app/auth"
+	"github.com/tekitla/tekitla-gateway/app/auth/authtest"
+	"github.com/tekitla/tekitla-gateway/app/gateway"
+	"github.com/tekitla/tekitla-gateway/app/middleware"
+	"github.com/tekitla/tekitla-gateway/app/ratelimit"
+	"github.com/tekitla/tekitla-gateway/app/routes"
+	"github.com/tekitla/tekitla-gateway/app/upstream"
 )
 
 // ---------------------------------------------------------------------------
@@ -126,7 +126,7 @@ const testProject = "proyecto-test"
 
 // testAllowedEmail es el único email de AUTH_ALLOWED_EMAILS en los tests
 // (mismo armado que cli/main.go: Firebase + EmailAllowlist).
-const testAllowedEmail = "duena@tequio.test"
+const testAllowedEmail = "duena@tekitla.test"
 
 func newCreds(t *testing.T, _ *routes.Table) *creds {
 	t.Helper()

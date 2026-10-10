@@ -100,7 +100,7 @@ func Load() (*Config, error) {
 		UpstreamTLS:  getBool("UPSTREAM_TLS", false, &errs),
 		UpstreamAuth: getEnv("UPSTREAM_AUTH", "none"),
 
-		FirebaseProjectID: getEnv("FIREBASE_PROJECT_ID", "tequio-app-435b4"),
+		FirebaseProjectID: getEnv("FIREBASE_PROJECT_ID", "tekitla-app"),
 		FirebaseJWKSURL:   os.Getenv("FIREBASE_JWKS_URL"),
 		AllowedEmails:     splitList(os.Getenv("AUTH_ALLOWED_EMAILS")),
 		OIDCIssuer:        getEnv("OIDC_ISSUER", ""),

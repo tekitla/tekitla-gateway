@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vrojas1015/tequio-gateway/app/auth"
-	"github.com/vrojas1015/tequio-gateway/app/auth/authtest"
+	"github.com/tekitla/tekitla-gateway/app/auth"
+	"github.com/tekitla/tekitla-gateway/app/auth/authtest"
 )
 
-const proyecto = "tequio-test"
+const proyecto = "tekitla-test"
 
 // firebaseConAllowlist arma lo mismo que cli/main.go: Firebase + allowlist.
 func firebaseConAllowlist(t *testing.T, emails ...string) (*auth.EmailAllowlist, *authtest.Issuer) {

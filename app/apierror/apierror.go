@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/vrojas1015/tequio-gateway/app/reqctx"
+	"github.com/tekitla/tekitla-gateway/app/reqctx"
 )
 
 // Códigos propios de HTTP (el resto son los nombres de los códigos gRPC).

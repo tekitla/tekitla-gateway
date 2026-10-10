@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/vrojas1015/tequio-gateway/app/apierror"
+	"github.com/tekitla/tekitla-gateway/app/apierror"
 )
 
 // CORSConfig es la lista de orígenes permitidos (por entorno, en

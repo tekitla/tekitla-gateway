@@ -8,7 +8,7 @@ import (
 )
 
 // AllowlistRole es el rol que otorga EmailAllowlist. routes.yaml lo pide en
-// todas las rutas de Tequio (rebanada 1: un solo dueño, sin roles propios).
+// todas las rutas de Tekitla (rebanada 1: un solo dueño, sin roles propios).
 const AllowlistRole = "allowlist"
 
 // EmailAllowlist envuelve a otro Authenticator (Firebase) y otorga el rol
