@@ -70,7 +70,7 @@ func TestRutaSinDeclararEs404(t *testing.T) {
 	}
 	e := newEnv(t, full.Without(plain.Method))
 	method, path, body := request(plain)
-	n, v := e.creds.header("u-admin", "items.admin")
+	n, v := e.creds.header("u-admin", "allowlist")
 	w := e.do(method, path, body, n, v)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("ruta sin declarar: %d, esperaba 404", w.Code)
@@ -330,7 +330,7 @@ func TestRequestIDEIdentidadHaciaElServicio(t *testing.T) {
 
 func TestLogsSinSecretos(t *testing.T) {
 	e := newEnv(t, nil)
-	n, v := e.creds.header("u-logs", "items.admin")
+	n, v := e.creds.header("u-logs", "allowlist")
 	if n == "" { // auth = ninguno: igual se manda un token para ver que no se loguee
 		n, v = "Authorization", "Bearer token-que-no-puede-aparecer"
 	}

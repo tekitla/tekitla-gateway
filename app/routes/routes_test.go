@@ -82,10 +82,10 @@ func TestParseInvalido(t *testing.T) {
 func TestNormalizeYSamplePath(t *testing.T) {
 	cases := []struct{ tpl, norm, sample string }{
 		{"/v1/items", "/v1/items", "/v1/items"},
-		{"/v1/items/{id}", "/v1/items/{id=*}", "/v1/items/x"},
-		{"/v1/{name=shelves/*/books/*}", "/v1/{name=shelves/*/books/*}", "/v1/shelves/x/books/x"},
-		{"/v1/items/{id}:archive", "/v1/items/{id=*}:archive", "/v1/items/x:archive"},
-		{"/v1/files/**", "/v1/files/**", "/v1/files/x"},
+		{"/v1/items/{id}", "/v1/items/{id=*}", "/v1/items/1"},
+		{"/v1/{name=shelves/*/books/*}", "/v1/{name=shelves/*/books/*}", "/v1/shelves/1/books/1"},
+		{"/v1/items/{id}:archive", "/v1/items/{id=*}:archive", "/v1/items/1:archive"},
+		{"/v1/files/**", "/v1/files/**", "/v1/files/1"},
 	}
 	for _, c := range cases {
 		b := Binding{Verb: "GET", Template: c.tpl}

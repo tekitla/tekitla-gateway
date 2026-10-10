@@ -20,7 +20,7 @@ import (
 	"github.com/vrojas1015/tequio-gateway/app/routes"
 	"github.com/vrojas1015/tequio-gateway/app/telemetry"
 	"github.com/vrojas1015/tequio-gateway/app/upstream"
-	"github.com/vrojas1015/tequio-gateway/gen/openapi"
+	"github.com/vrojas1015/tequio-protos/gen/openapi"
 )
 
 func main() {
