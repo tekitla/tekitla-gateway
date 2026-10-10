@@ -34,12 +34,12 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/vrojas1015/tequio-gateway/app/auth"
-	"github.com/vrojas1015/tequio-gateway/app/middleware"
-	"github.com/vrojas1015/tequio-gateway/app/ratelimit"
-	"github.com/vrojas1015/tequio-gateway/app/reqctx"
-	"github.com/vrojas1015/tequio-gateway/app/routes"
-	"github.com/vrojas1015/tequio-gateway/app/upstream"
+	"github.com/tekitla/tekitla-gateway/app/auth"
+	"github.com/tekitla/tekitla-gateway/app/middleware"
+	"github.com/tekitla/tekitla-gateway/app/ratelimit"
+	"github.com/tekitla/tekitla-gateway/app/reqctx"
+	"github.com/tekitla/tekitla-gateway/app/routes"
+	"github.com/tekitla/tekitla-gateway/app/upstream"
 )
 
 // Upstream es un servicio con su conexión ya abierta (con DialOptions()).

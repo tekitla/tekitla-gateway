@@ -1,7 +1,7 @@
 package upstream
 
 import (
-	issuesv1 "github.com/vrojas1015/tequio-protos/gen/go/issues/v1"
+	issuesv1 "github.com/tekitla/tekitla-protos/gen/go/issues/v1"
 )
 
 // Services es la ÚNICA lista de servicios gRPC que expone el gateway.
@@ -17,7 +17,7 @@ import (
 // sola conexión.
 var Services = []Service{
 	{
-		// tequio-issues: proyectos e issues (issue 002, rebanada 1).
+		// tekitla-issues: proyectos e issues (issue 002, rebanada 1).
 		Name:        "issues",
 		GRPCService: "issues.v1.IssueService",
 		Register:    issuesv1.RegisterIssueServiceHandler,

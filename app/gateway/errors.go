@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/vrojas1015/tequio-gateway/app/apierror"
-	"github.com/vrojas1015/tequio-gateway/app/reqctx"
+	"github.com/tekitla/tekitla-gateway/app/apierror"
+	"github.com/tekitla/tekitla-gateway/app/reqctx"
 )
 
 // clientCodes: códigos cuyo mensaje es para el cliente (errores de dominio

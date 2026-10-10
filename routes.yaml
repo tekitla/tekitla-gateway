@@ -1,5 +1,5 @@
 # =============================================================================
-# Tabla de rutas de tequio-gateway — DENEGAR POR DEFECTO
+# Tabla de rutas de tekitla-gateway — DENEGAR POR DEFECTO
 # =============================================================================
 #
 # Las rutas HTTP salen de las anotaciones google.api.http de los .proto
@@ -33,7 +33,7 @@
 
 version: 1
 
-# Tequio, rebanada 1 (issue 002): un solo dueño. Todas las rutas exigen el rol
+# Tekitla, rebanada 1 (issue 002): un solo dueño. Todas las rutas exigen el rol
 # `allowlist`, que el gateway NO lee del token: lo otorga solo a quien tiene el
 # email verificado en AUTH_ALLOWED_EMAILS (app/auth/allowlist.go; docs/auth.md).
 # Nada es público salvo /healthz y /readyz (fuera del mux).

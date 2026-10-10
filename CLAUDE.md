@@ -1,11 +1,11 @@
-# tequio-gateway — contexto para Claude
+# tekitla-gateway — contexto para Claude
 
 ## Qué es
 
-Entrada pública REST de Tequio: autentica con Firebase y traduce a gRPC.
+Entrada pública REST de Tekitla: autentica con Firebase y traduce a gRPC.
 
-Tequio, rebanada 1 (issue 002): expone `issues.v1.IssueService`
-(`github.com/vrojas1015/tequio-protos@v0.1.0`) del servicio `tequio-issues`
+Tekitla, rebanada 1 (issue 002): expone `issues.v1.IssueService`
+(`github.com/tekitla/tekitla-protos@v0.1.1`) del servicio `tekitla-issues`
 (`UPSTREAM_ISSUES_ADDR`, gRPC :5000). Las 6 rutas exigen el rol `allowlist`,
 que **no** sale del token: lo otorga `auth.EmailAllowlist` solo a los emails
 verificados de `AUTH_ALLOWED_EMAILS` (vacía = nadie entra). Nada público
@@ -44,19 +44,19 @@ Detalle: `docs/rutas.md`; auth: `docs/auth.md`.
    `docker-compose.yml` y `docker-compose.coolify.yml`.
 3. **routes.yaml**: `<paquete>.<Servicio>/<Método>` con `public: true`,
    `roles: [...]` o `deny: true` (+ `rate_limit` estricto en login, registro,
-   recuperar clave, búsquedas). En Tequio (rebanada 1): `roles: [allowlist]`.
+   recuperar clave, búsquedas). En Tekitla (rebanada 1): `roles: [allowlist]`.
 4. `go test ./...`: `TestAutorizacionPorRuta` genera los casos solo
    (401/403/200; pública → 200; deny → 404; con `allowlist`, además 403 por
    email ajeno, sin verificar o rol puesto como claim). Si falla por "sin
-   entrada", la ruta no está declarada. `TestRutasDeTequioExigenAllowlist`
+   entrada", la ruta no está declarada. `TestRutasDeTekitlaExigenAllowlist`
    fija la lista de rutas expuestas: actualizala si el contrato cambia.
 
 ## Repo de protos
 
-`github.com/vrojas1015/tequio-protos` (hoy `v0.1.0`): el handler sale de
+`github.com/tekitla/tekitla-protos` (hoy `v0.1.1`): el handler sale de
 `<módulo>/gen/go/issues/v1` (`app/upstream/registry.go`) y el OpenAPI de
 `<módulo>/gen/openapi` (`cli/main.go`). Ya no hay `proto/`, `gen/` ni `buf.*`
-locales. Versión nueva: `go get github.com/vrojas1015/tequio-protos@<tag>`. Sin
+locales. Versión nueva: `go get github.com/tekitla/tekitla-protos@<tag>`. Sin
 tag (co-desarrollo): `go mod edit -replace` o `make workspace`.
 
 ## Reglas de seguridad (no negociables)

@@ -16,7 +16,7 @@ on:
         type: string
 
 env:
-  LOCAL_IMAGE: "tequio-gateway:ci"
+  LOCAL_IMAGE: "tekitla-gateway:ci"
 
 jobs:
   deploy:

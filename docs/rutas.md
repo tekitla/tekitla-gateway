@@ -1,4 +1,4 @@
-# Rutas, límites y errores — tequio-gateway
+# Rutas, límites y errores — tekitla-gateway
 
 ## De dónde salen las rutas
 
@@ -15,9 +15,9 @@
    `Register...Handler` generada y nombre del upstream → `UPSTREAM_<NAME>_ADDR`).
 3. **Autorización**: `routes.yaml`, **denegar por defecto**.
 
-## Rutas de Tequio (rebanada 1)
+## Rutas de Tekitla (rebanada 1)
 
-Las 6 de `issues.v1.IssueService` (tequio-protos `v0.1.0`), todas con
+Las 6 de `issues.v1.IssueService` (tekitla-protos `v0.1.1`), todas con
 `roles: [allowlist]` (docs/auth.md). Lecturas: bucket global (600/min, ráfaga
 100). Escrituras: body ≤ 64 KiB, timeout 5 s y bucket propio por usuario.
 

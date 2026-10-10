@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vrojas1015/tequio-gateway/app/reqctx"
+	"github.com/tekitla/tekitla-gateway/app/reqctx"
 )
 
 // AccessLog escribe una línea estructurada por request. Lo que NO se loguea

@@ -5,7 +5,7 @@ package reqctx
 import (
 	"context"
 
-	"github.com/vrojas1015/tequio-gateway/app/auth"
+	"github.com/tekitla/tekitla-gateway/app/auth"
 )
 
 // Info se crea en el middleware de request-id y lo completan los siguientes.

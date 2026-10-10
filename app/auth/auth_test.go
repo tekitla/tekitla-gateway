@@ -12,8 +12,8 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 
-	"github.com/vrojas1015/tequio-gateway/app/auth"
-	"github.com/vrojas1015/tequio-gateway/app/auth/authtest"
+	"github.com/tekitla/tekitla-gateway/app/auth"
+	"github.com/tekitla/tekitla-gateway/app/auth/authtest"
 )
 
 const aud = "api-test"

@@ -1,4 +1,4 @@
-// Entry point de tequio-gateway: solo wiring + ciclo de vida.
+// Entry point de tekitla-gateway: solo wiring + ciclo de vida.
 package main
 
 import (
@@ -12,15 +12,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/vrojas1015/tequio-gateway/app/auth"
-	"github.com/vrojas1015/tequio-gateway/app/config"
-	"github.com/vrojas1015/tequio-gateway/app/gateway"
-	"github.com/vrojas1015/tequio-gateway/app/middleware"
-	"github.com/vrojas1015/tequio-gateway/app/ratelimit"
-	"github.com/vrojas1015/tequio-gateway/app/routes"
-	"github.com/vrojas1015/tequio-gateway/app/telemetry"
-	"github.com/vrojas1015/tequio-gateway/app/upstream"
-	"github.com/vrojas1015/tequio-protos/gen/openapi"
+	"github.com/tekitla/tekitla-gateway/app/auth"
+	"github.com/tekitla/tekitla-gateway/app/config"
+	"github.com/tekitla/tekitla-gateway/app/gateway"
+	"github.com/tekitla/tekitla-gateway/app/middleware"
+	"github.com/tekitla/tekitla-gateway/app/ratelimit"
+	"github.com/tekitla/tekitla-gateway/app/routes"
+	"github.com/tekitla/tekitla-gateway/app/telemetry"
+	"github.com/tekitla/tekitla-gateway/app/upstream"
+	"github.com/tekitla/tekitla-protos/gen/openapi"
 )
 
 func main() {
@@ -41,7 +41,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("configuración: %w", err)
 	}
-	log := telemetry.NewLogger(os.Stdout, cfg.LogFormat, cfg.LogLevel, "tequio-gateway", cfg.ServiceEnv)
+	log := telemetry.NewLogger(os.Stdout, cfg.LogFormat, cfg.LogLevel, "tekitla-gateway", cfg.ServiceEnv)
 	slog.SetDefault(log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vrojas1015/tequio-gateway/app/auth"
+	"github.com/tekitla/tekitla-gateway/app/auth"
 )
 
 // TestAutorizacionPorRuta se GENERA desde routes.yaml + las anotaciones
@@ -63,7 +63,7 @@ func TestAutorizacionPorRuta(t *testing.T) {
 				n, v = e.creds.header("u-sin-rol")
 				expect("credencial valida sin rol", http.StatusForbidden, n, v)
 				if slices.Contains(pol.Roles, auth.AllowlistRole) {
-					n, v = e.creds.withEmail("u-ajeno", "otra@tequio.test", true)
+					n, v = e.creds.withEmail("u-ajeno", "otra@tekitla.test", true)
 					expect("email fuera de la allowlist", http.StatusForbidden, n, v)
 					n, v = e.creds.withEmail("u-sin-verificar", testAllowedEmail, false)
 					expect("email permitido sin verificar", http.StatusForbidden, n, v)
@@ -101,10 +101,10 @@ func TestRutasDeLaTablaExisten(t *testing.T) {
 	}
 }
 
-// TestRutasDeTequioExigenAllowlist (rebanada 1): las 6 rutas del contrato
+// TestRutasDeTekitlaExigenAllowlist (rebanada 1): las 6 rutas del contrato
 // están expuestas, ninguna es pública ni se abre sin el rol de la allowlist, y
 // las escrituras tienen un rate limit más estricto que las lecturas.
-func TestRutasDeTequioExigenAllowlist(t *testing.T) {
+func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 	e := newEnv(t, nil)
 	want := []string{
 		"GET /v1/projects", "POST /v1/projects",

@@ -1,5 +1,5 @@
 # =============================================================================
-# CI/CD tequio-gateway — tests + seguridad + GHCR + Coolify
+# CI/CD tekitla-gateway — tests + seguridad + GHCR + Coolify
 # =============================================================================
 #
 #   - Pull request -> test, govulncheck, imagen + Trivy.
@@ -17,7 +17,7 @@
 # La imagen publicada en GHCR es EXACTAMENTE la escaneada (artifact `image`).
 # Variables: COOLIFY_URL, COOLIFY_RESOURCE_UUID_QA, COOLIFY_RESOURCE_UUID_PROD.
 # Secret: COOLIFY_TOKEN. Setup: docs/deploy.md.
-# Secret PROTOS_TOKEN: token de solo lectura al repo de protos (github.com/vrojas1015/tequio-protos).
+# Secret PROTOS_TOKEN: token de solo lectura al repo de protos (github.com/tekitla/tekitla-protos).
 # =============================================================================
 
 name: ci
@@ -37,7 +37,7 @@ env:
   GOVULNCHECK_VERSION: v1.8.0
   TRIVY_IMAGE: aquasec/trivy:0.74.0
   GOWORK: "off"
-  GOPRIVATE: "github.com/vrojas1015/tequio-protos"
+  GOPRIVATE: "github.com/tekitla/tekitla-protos"
 
 jobs:
   test:
@@ -81,15 +81,15 @@ jobs:
           name: vendor
           path: .
       - name: Build
-        run: DOCKER_BUILDKIT=1 docker build -t tequio-gateway:ci .
+        run: DOCKER_BUILDKIT=1 docker build -t tekitla-gateway:ci .
       - name: Trivy (HIGH/CRITICAL con fix -> falla)
         run: |
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image \
             --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress \
-            tequio-gateway:ci
+            tekitla-gateway:ci
       - name: Guardar la imagen escaneada
         if: github.event_name == 'push'
-        run: docker save -o image.tar tequio-gateway:ci
+        run: docker save -o image.tar tekitla-gateway:ci
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push'
         with:

@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"github.com/vrojas1015/tequio-gateway/app/apierror"
-	"github.com/vrojas1015/tequio-gateway/app/reqctx"
+	"github.com/tekitla/tekitla-gateway/app/apierror"
+	"github.com/tekitla/tekitla-gateway/app/reqctx"
 )
 
 // Recover convierte un panic en un 500 genérico (con request_id); el stack

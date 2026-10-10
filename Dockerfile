@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 ###############################################################################
-# tequio-gateway — MULTI-STAGE DOCKERFILE (vendor)
+# tekitla-gateway — MULTI-STAGE DOCKERFILE (vendor)
 ###############################################################################
 # vendor/ lo genera el job de tests de la CI (`go mod vendor`, donde están las
 # credenciales para módulos privados como el repo de protos) y viaja como
@@ -27,7 +27,7 @@ COPY vendor ./vendor
 COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
-    go build -trimpath -ldflags="-s -w" -mod=vendor -o /out/tequio-gateway ./cli
+    go build -trimpath -ldflags="-s -w" -mod=vendor -o /out/tekitla-gateway ./cli
 
 # ──────────────────────────────────────────────
 # STAGE 2: RUNTIME
@@ -39,7 +39,7 @@ FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c
 
 WORKDIR /app
 
-COPY --from=builder /out/tequio-gateway /app/tequio-gateway
+COPY --from=builder /out/tekitla-gateway /app/tekitla-gateway
 # La tabla de rutas viaja en la imagen (versionada con el código).
 COPY --from=builder /src/routes.yaml /app/routes.yaml
 
@@ -52,4 +52,4 @@ ENV APP_ENV=production \
 
 EXPOSE 8080
 
-ENTRYPOINT ["/app/tequio-gateway"]
+ENTRYPOINT ["/app/tekitla-gateway"]
