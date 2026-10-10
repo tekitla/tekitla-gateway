@@ -59,7 +59,7 @@ func run() error {
 	}
 
 	// 2. Autenticación (respuesta `auth` de la plantilla: firebase).
-	authn, challenge, err := newAuthenticator(cfg)
+	authn, challenge, err := newAuthenticator(cfg, log)
 	if err != nil {
 		return fmt.Errorf("auth: %w", err)
 	}
@@ -149,11 +149,30 @@ func run() error {
 	return nil
 }
 
-func newAuthenticator(cfg *config.Config) (auth.Authenticator, string, error) {
+// newAuthenticator: ID tokens de Firebase + allowlist de emails verificados
+// (AUTH_ALLOWED_EMAILS), que otorga el rol que piden las rutas de routes.yaml.
+func newAuthenticator(cfg *config.Config, log *slog.Logger) (auth.Authenticator, string, error) {
+	if cfg.FirebaseJWKSURL != "" {
+		log.Warn("FIREBASE_JWKS_URL definido: los tokens se verifican contra un JWKS de PRUEBA (solo desarrollo)",
+			slog.String("jwks_url", cfg.FirebaseJWKSURL))
+	}
 	v, err := auth.NewFirebase(cfg.FirebaseProjectID, auth.FirebaseOptions{
 		JWTOptions: auth.JWTOptions{RolesClaim: cfg.RolesClaim, Leeway: cfg.ClockSkew},
+		JWKSURL:    cfg.FirebaseJWKSURL,
 	})
-	return v, "Bearer", err
+	if err != nil {
+		return nil, "", err
+	}
+	allow, err := auth.NewEmailAllowlist(v, cfg.AllowedEmails)
+	if err != nil {
+		return nil, "", err
+	}
+	if allow.Len() == 0 {
+		log.Warn("AUTH_ALLOWED_EMAILS vacío: ningún usuario puede usar la API (todas las rutas responden 403)")
+	} else {
+		log.Info("allowlist de emails cargada", slog.Int("emails", allow.Len()))
+	}
+	return allow, "Bearer", nil
 }
 
 func corsConfig(cfg *config.Config) middleware.CORSConfig {

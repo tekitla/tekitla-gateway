@@ -3,8 +3,11 @@ package gateway_test
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/vrojas1015/tequio-gateway/app/auth"
 )
 
 // TestAutorizacionPorRuta se GENERA desde routes.yaml + las anotaciones
@@ -17,6 +20,8 @@ import (
 //	public: true         -> sin credencial NO es 401 (llega al servicio: 200)
 //	roles: [...]         -> sin credencial 401; credencial inválida 401;
 //	                        credencial válida sin rol 403; con cada rol 200
+//	roles: [allowlist]   -> además 403 con email fuera de la lista, con email
+//	                        permitido sin verificar y con el rol como claim
 func TestAutorizacionPorRuta(t *testing.T) {
 	e := newEnv(t, nil)
 	if len(e.report.Bindings) == 0 {
@@ -57,6 +62,14 @@ func TestAutorizacionPorRuta(t *testing.T) {
 				expect("credencial invalida", http.StatusUnauthorized, n, v)
 				n, v = e.creds.header("u-sin-rol")
 				expect("credencial valida sin rol", http.StatusForbidden, n, v)
+				if slices.Contains(pol.Roles, auth.AllowlistRole) {
+					n, v = e.creds.withEmail("u-ajeno", "otra@tequio.test", true)
+					expect("email fuera de la allowlist", http.StatusForbidden, n, v)
+					n, v = e.creds.withEmail("u-sin-verificar", testAllowedEmail, false)
+					expect("email permitido sin verificar", http.StatusForbidden, n, v)
+					n, v = e.creds.withEmail("u-claim", "", false, auth.AllowlistRole)
+					expect("rol allowlist como claim del token", http.StatusForbidden, n, v)
+				}
 				for _, role := range pol.Roles {
 					n, v = e.creds.header("u-"+role, role)
 					if !expect("con rol "+role, http.StatusOK, n, v) {
@@ -85,5 +98,35 @@ func TestRutasDeLaTablaExisten(t *testing.T) {
 	e := newEnv(t, nil)
 	if len(e.report.Undeclared) > 0 {
 		t.Fatalf("métodos con google.api.http sin entrada en routes.yaml (quedan en 404): %v", e.report.Undeclared)
+	}
+}
+
+// TestRutasDeTequioExigenAllowlist (rebanada 1): las 6 rutas del contrato
+// están expuestas, ninguna es pública ni se abre sin el rol de la allowlist, y
+// las escrituras tienen un rate limit más estricto que las lecturas.
+func TestRutasDeTequioExigenAllowlist(t *testing.T) {
+	e := newEnv(t, nil)
+	want := []string{
+		"GET /v1/projects", "POST /v1/projects",
+		"GET /v1/projects/{project_id}/issues", "POST /v1/projects/{project_id}/issues",
+		"GET /v1/projects/{project_id}/issues/{number}", "POST /v1/projects/{project_id}/issues/{number}:move",
+	}
+	var got []string
+	for _, b := range e.report.Bindings {
+		got = append(got, b.Verb+" "+b.Template)
+		pol := e.table.Policy(b.Method)
+		if pol == nil || pol.Public || pol.Deny || !slices.Equal(pol.Roles, []string{auth.AllowlistRole}) {
+			t.Errorf("%s: política %+v, esperaba roles: [%s]", b.Method, pol, auth.AllowlistRole)
+			continue
+		}
+		// Escrituras: bucket propio y más estricto que el de las lecturas.
+		if b.Verb == http.MethodPost && (!pol.OwnRateLimit || pol.RateLimit.PerMinute >= e.table.Defaults.RateLimit.PerMinute) {
+			t.Errorf("%s: rate limit %+v, esperaba uno propio menor que el default %+v", b.Method, pol.RateLimit, e.table.Defaults.RateLimit)
+		}
+	}
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("rutas expuestas = %v, esperaba %v", got, want)
 	}
 }

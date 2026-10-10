@@ -8,6 +8,8 @@
 //     NewFirebase y NewOIDC.
 //   - APIKeys: header X-API-Key contra hashes SHA-256 con scopes.
 //   - None: sin auth (todas las rutas tienen que ser públicas).
+//   - EmailAllowlist: envuelve a otro y otorga el rol AllowlistRole solo a
+//     los emails verificados de una lista (Tequio, rebanada 1).
 //
 // Cuál se usa lo decide la respuesta `auth` de la plantilla (cli/main.go).
 package auth
@@ -34,6 +36,10 @@ type Identity struct {
 	Subject string   // sub del token, o "apikey:<id>"
 	Roles   []string // roles del token o scopes de la API key
 	Kind    string   // "jwt" | "apikey"
+	// Email y EmailVerified: claims `email` y `email_verified` del token (solo
+	// JWT). Los usa EmailAllowlist; NUNCA viajan a los servicios ni a los logs.
+	Email         string
+	EmailVerified bool
 }
 
 // HasAnyRole: alcanza con uno de los requeridos.

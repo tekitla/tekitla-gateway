@@ -124,6 +124,10 @@ type creds struct {
 
 const testProject = "proyecto-test"
 
+// testAllowedEmail es el único email de AUTH_ALLOWED_EMAILS en los tests
+// (mismo armado que cli/main.go: Firebase + EmailAllowlist).
+const testAllowedEmail = "duena@tequio.test"
+
 func newCreds(t *testing.T, _ *routes.Table) *creds {
 	t.Helper()
 	is := authtest.NewIssuer(t)
@@ -132,16 +136,42 @@ func newCreds(t *testing.T, _ *routes.Table) *creds {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &creds{issuer: is, authn: v}
+	allow, err := auth.NewEmailAllowlist(v, []string{testAllowedEmail})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &creds{issuer: is, authn: allow}
 }
 
 // header devuelve (nombre, valor) de una credencial válida con esos roles
-// (sin roles = válida pero sin permisos).
+// (sin roles = válida pero sin permisos). El rol auth.AllowlistRole no viaja
+// como claim (el gateway lo ignora): se obtiene con el email permitido y
+// verificado.
 func (c *creds) header(sub string, roles ...string) (string, string) {
+	tokenRoles := []string{}
+	email := ""
+	for _, r := range roles {
+		if r == auth.AllowlistRole {
+			email = testAllowedEmail
+			continue
+		}
+		tokenRoles = append(tokenRoles, r)
+	}
+	return c.withEmail(sub, email, email != "", tokenRoles...)
+}
+
+// withEmail: credencial válida con claims email/email_verified (email vacío =
+// sin claim) y roles en el claim `roles`.
+func (c *creds) withEmail(sub, email string, verified bool, roles ...string) (string, string) {
 	if roles == nil {
 		roles = []string{}
 	}
-	return "Authorization", "Bearer " + c.issuer.Token(sub, testProject, roles...)
+	cl := c.issuer.Claims(sub, testProject, roles...)
+	if email != "" {
+		cl["email"] = email
+		cl["email_verified"] = verified
+	}
+	return "Authorization", "Bearer " + c.issuer.Sign(cl, false)
 }
 
 // invalid devuelve una credencial con firma válida pero vencida.
