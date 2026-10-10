@@ -1,0 +1,68 @@
+# Workflow reutilizable: push a GHCR de la imagen ESCANEADA (artifact `image`
+# del job `image` de ci.yml) + deploy en Coolify v4 (API). Ver docs/deploy.md.
+
+name: deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "qa | prod"
+        required: true
+        type: string
+      image_tag:
+        description: "Tag de git = tag inmutable de la imagen (qa-v* / prod-v*)"
+        required: true
+        type: string
+
+env:
+  LOCAL_IMAGE: "tequio-gateway:ci"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_TAG: ${{ inputs.image_tag }}
+      TARGET_ENV: ${{ inputs.environment }}
+      COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      COOLIFY_RESOURCE_UUID: ${{ inputs.environment == 'prod' && vars.COOLIFY_RESOURCE_UUID_PROD || vars.COOLIFY_RESOURCE_UUID_QA }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: image
+          path: .
+
+      - name: Validar tag y variables
+        run: |
+          case "$IMAGE_TAG" in
+            "${TARGET_ENV}"-v*) ;;
+            *) echo "El tag '$IMAGE_TAG' no corresponde al entorno '$TARGET_ENV'"; exit 1 ;;
+          esac
+          : "${COOLIFY_URL:?Falta la variable COOLIFY_URL}"
+          : "${COOLIFY_TOKEN:?Falta el secret COOLIFY_TOKEN}"
+          : "${COOLIFY_RESOURCE_UUID:?Falta COOLIFY_RESOURCE_UUID_QA/_PROD}"
+          # GHCR exige el nombre en minúsculas.
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Push (GHCR)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker load -i image.tar
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag "$LOCAL_IMAGE" "$IMAGE:$IMAGE_TAG"
+          docker tag "$LOCAL_IMAGE" "$IMAGE:$TARGET_ENV"
+          docker push "$IMAGE:$IMAGE_TAG"
+          docker push "$IMAGE:$TARGET_ENV"
+
+      - name: Deploy (Coolify)
+        run: |
+          curl -fsS "$COOLIFY_URL/api/v1/deploy?uuid=$COOLIFY_RESOURCE_UUID&force=false" \
+            -H "Authorization: Bearer $COOLIFY_TOKEN"
+          echo
+          echo "Deploy encolado en Coolify. Seguilo en el panel (Deployments) del recurso."

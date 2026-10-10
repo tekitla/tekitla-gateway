@@ -1,0 +1,122 @@
+# =============================================================================
+# CI/CD tequio-gateway — tests + seguridad + GHCR + Coolify
+# =============================================================================
+#
+#   - Pull request -> test, govulncheck, imagen + Trivy.
+#   - Tag qa-v*    -> lo mismo + deploy a QA (workflow reutilizable deploy.yml).
+#   - Tag prod-v*  -> lo mismo + deploy a prod (protegé el environment `prod`
+#                     con reviewers en Settings > Environments).
+#
+# Seguridad (docs/05-api-gateway.md §8):
+#   govulncheck  vulnerabilidades ALCANZABLES en dependencias y stdlib.
+#   Trivy        escanea la imagen; falla con HIGH/CRITICAL que tengan fix.
+#                Corre con la imagen oficial fijada (aquasec/trivy:<versión>),
+#                no con una action de terceros. Para aceptar un riesgo
+#                puntual: .trivyignore con CVE, motivo y fecha de revisión.
+#
+# La imagen publicada en GHCR es EXACTAMENTE la escaneada (artifact `image`).
+# Variables: COOLIFY_URL, COOLIFY_RESOURCE_UUID_QA, COOLIFY_RESOURCE_UUID_PROD.
+# Secret: COOLIFY_TOKEN. Setup: docs/deploy.md.
+# Secret PROTOS_TOKEN: token de solo lectura al repo de protos (github.com/vrojas1015/tequio-protos).
+# =============================================================================
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    tags:
+      - "qa-v*"
+      - "prod-v*"
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.26.9"
+  GOVULNCHECK_VERSION: v1.8.0
+  TRIVY_IMAGE: aquasec/trivy:0.74.0
+  GOWORK: "off"
+  GOPRIVATE: "github.com/vrojas1015/tequio-protos"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Acceso al módulo privado de protos
+        env:
+          PROTOS_TOKEN: ${{ secrets.PROTOS_TOKEN }}
+        run: git config --global url."https://x-access-token:${PROTOS_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Test (incluye los tests de autorización generados desde routes.yaml)
+        run: |
+          go mod download
+          go mod verify
+          test -z "$(gofmt -l app cli)" || { gofmt -l app cli; echo "gofmt pendiente"; exit 1; }
+          go vet ./...
+          go test ./... -count=1 -timeout=180s
+      - name: govulncheck
+        run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
+      - name: Vendor (el build de la imagen no tiene red ni credenciales)
+        run: go mod vendor
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vendor
+          path: |
+            vendor/
+            go.mod
+            go.sum
+          retention-days: 1
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: vendor
+          path: .
+      - name: Build
+        run: DOCKER_BUILDKIT=1 docker build -t tequio-gateway:ci .
+      - name: Trivy (HIGH/CRITICAL con fix -> falla)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image \
+            --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress \
+            tequio-gateway:ci
+      - name: Guardar la imagen escaneada
+        if: github.event_name == 'push'
+        run: docker save -o image.tar tequio-gateway:ci
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          name: image
+          path: image.tar
+          retention-days: 1
+
+  release-qa:
+    if: github.event_name == 'push' && startsWith(github.ref_name, 'qa-v')
+    needs: image
+    permissions:
+      contents: read
+      packages: write   # push a GHCR con GITHUB_TOKEN
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: qa
+      image_tag: ${{ github.ref_name }}
+    secrets: inherit
+
+  release-prod:
+    if: github.event_name == 'push' && startsWith(github.ref_name, 'prod-v')
+    needs: image
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: prod
+      image_tag: ${{ github.ref_name }}
+    secrets: inherit

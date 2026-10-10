@@ -1,0 +1,17 @@
+# Respuestas de Copier: NO editar a mano. Las usa `copier update`.
+_commit: v0.2.0
+_src_path: gh:vrojas1015/template-api-gateway
+auth: firebase
+ci_provider: github
+deploy_target: coolify
+docs_repo: ''
+dueño: '@vrojas1015'
+firebase_project: tequio-app-435b4
+go_version: 1.26.9
+http_port: 8080
+module_path: github.com/vrojas1015/tequio-gateway
+protos_module: github.com/vrojas1015/tequio-protos
+protos_version: v0.1.0
+repo_name: tequio-gateway
+service_description: 'Entrada pública REST de Tequio: autentica con Firebase y traduce
+    a gRPC.'
