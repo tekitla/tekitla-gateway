@@ -57,6 +57,16 @@ routes:
   issues.v1.IssueService/GetIssue:
     roles: [allowlist]
 
+  # Rebanada 3a: estados, etiquetas e historial.
+  issues.v1.IssueService/ListStatuses:
+    roles: [allowlist]
+
+  issues.v1.IssueService/ListLabels:
+    roles: [allowlist]
+
+  issues.v1.IssueService/ListIssueEvents:
+    roles: [allowlist]
+
   # --- Escrituras (POST): body chico, timeout corto y bucket propio ----------
   issues.v1.IssueService/CreateProject:
     roles: [allowlist]
@@ -81,3 +91,70 @@ routes:
     rate_limit:
       per_minute: 120
       burst: 30
+
+  # Rebanada 3a. UpdateIssue acepta la descripción completa (20 000
+  # caracteres): body de hasta 128 KiB.
+  issues.v1.IssueService/UpdateIssue:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 131072
+    rate_limit:
+      per_minute: 120
+      burst: 30
+
+  issues.v1.IssueService/CreateComment:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 60
+      burst: 20
+
+  # Configuración del proyecto (estados y etiquetas): cambia poco.
+  issues.v1.IssueService/CreateStatus:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 30
+      burst: 10
+
+  issues.v1.IssueService/UpdateStatus:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 30
+      burst: 10
+
+  issues.v1.IssueService/DeleteStatus:
+    roles: [allowlist]
+    timeout: 10s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 30
+      burst: 10
+
+  issues.v1.IssueService/CreateLabel:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 30
+      burst: 10
+
+  issues.v1.IssueService/UpdateLabel:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 30
+      burst: 10
+
+  issues.v1.IssueService/DeleteLabel:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 30
+      burst: 10
