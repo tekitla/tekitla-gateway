@@ -101,15 +101,23 @@ func TestRutasDeLaTablaExisten(t *testing.T) {
 	}
 }
 
-// TestRutasDeTekitlaExigenAllowlist (rebanada 1): las 6 rutas del contrato
-// están expuestas, ninguna es pública ni se abre sin el rol de la allowlist, y
-// las escrituras tienen un rate limit más estricto que las lecturas.
+// TestRutasDeTekitlaExigenAllowlist (rebanadas 1 y 3a): las 17 rutas del
+// contrato están expuestas, ninguna es pública ni se abre sin el rol de la
+// allowlist, y las escrituras tienen un rate limit más estricto que las
+// lecturas.
 func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 	e := newEnv(t, nil)
 	want := []string{
 		"GET /v1/projects", "POST /v1/projects",
 		"GET /v1/projects/{project_id}/issues", "POST /v1/projects/{project_id}/issues",
 		"GET /v1/projects/{project_id}/issues/{number}", "POST /v1/projects/{project_id}/issues/{number}:move",
+		"PATCH /v1/projects/{project_id}/issues/{number}",
+		"POST /v1/projects/{project_id}/issues/{number}/comments",
+		"GET /v1/projects/{project_id}/issues/{number}/events",
+		"GET /v1/projects/{project_id}/statuses", "POST /v1/projects/{project_id}/statuses",
+		"PATCH /v1/projects/{project_id}/statuses/{status_id}", "DELETE /v1/projects/{project_id}/statuses/{status_id}",
+		"GET /v1/projects/{project_id}/labels", "POST /v1/projects/{project_id}/labels",
+		"PATCH /v1/projects/{project_id}/labels/{label_id}", "DELETE /v1/projects/{project_id}/labels/{label_id}",
 	}
 	var got []string
 	for _, b := range e.report.Bindings {
@@ -120,7 +128,7 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 			continue
 		}
 		// Escrituras: bucket propio y más estricto que el de las lecturas.
-		if b.Verb == http.MethodPost && (!pol.OwnRateLimit || pol.RateLimit.PerMinute >= e.table.Defaults.RateLimit.PerMinute) {
+		if b.Verb != http.MethodGet && (!pol.OwnRateLimit || pol.RateLimit.PerMinute >= e.table.Defaults.RateLimit.PerMinute) {
 			t.Errorf("%s: rate limit %+v, esperaba uno propio menor que el default %+v", b.Method, pol.RateLimit, e.table.Defaults.RateLimit)
 		}
 	}
