@@ -108,7 +108,7 @@ instancias hace falta el store en Redis (fase 3 de la plantilla:
 Formato único para todo lo que responde el gateway:
 
 ```json
-{"error": {"code": "PERMISSION_DENIED", "message": "no tenés permiso para esta operación", "request_id": "3f1c..."}}
+{"error": {"code": "FAILED_PRECONDITION", "message": "el orden cambió; refrescá y reintentá", "reason": "STALE_ORDER", "request_id": "3f1c..."}}
 ```
 
 - `code`: nombre del código gRPC (`INVALID_ARGUMENT`, `NOT_FOUND`,
@@ -116,6 +116,24 @@ Formato único para todo lo que responde el gateway:
   `UNSUPPORTED_MEDIA_TYPE`.
 - Errores de dominio de los servicios (4xx: validación, no encontrado,
   conflicto, precondición) pasan con su mensaje.
+- `reason` (opcional): en esos 4xx, el `reason` del `google.rpc.ErrorInfo`
+  que manda el servicio, para distinguir errores con el mismo `code`. El
+  cliente decide con `code` + `reason`, nunca con `message` (es para
+  humanos). Solo viene si el `reason` tiene el formato de `ErrorInfo`
+  (`[A-Z][A-Z0-9_]+[A-Z0-9]`, hasta 63 caracteres) y dice algo más que el
+  `code`: sin `ErrorInfo`, o con `reason` igual al `code` (`NOT_FOUND`), el
+  campo no viene. `domain` y `metadata` del `ErrorInfo` no salen, tampoco en
+  los errores a mitad de un stream: pueden llevar datos internos. Los de
+  `tekitla-issues`:
+
+  | `code` | `reason` | Cuándo |
+  |---|---|---|
+  | `FAILED_PRECONDITION` | `STALE_ORDER` | reordenar con vecinos que ya no están en la columna o en ese orden (refrescar y reintentar) |
+  | `FAILED_PRECONDITION` | `LAST_STATUS_OF_CATEGORY` | borrar el último estado de una categoría |
+  | `FAILED_PRECONDITION` | `STATUS_HAS_ISSUES` | borrar un estado con issues sin `move_to_status_id` |
+  | `ALREADY_EXISTS` | `STATUS_NAME_TAKEN` | nombre de estado repetido en el proyecto |
+  | `ALREADY_EXISTS` | `LABEL_NAME_TAKEN` | nombre de etiqueta repetido en el proyecto |
+  | `ALREADY_EXISTS` | `PROJECT_KEY_TAKEN` | key de proyecto repetida en el espacio |
 - Todo 5xx (`INTERNAL`, `UNKNOWN`, `UNAVAILABLE`, `DEADLINE_EXCEEDED`...)
   sale con un mensaje **genérico**; el detalle real queda en el log con el
   mismo `request_id`. Nunca stack traces ni mensajes internos.
