@@ -101,7 +101,7 @@ func TestRutasDeLaTablaExisten(t *testing.T) {
 	}
 }
 
-// TestRutasDeTekitlaExigenAllowlist (rebanadas 1 y 3a): las 17 rutas del
+// TestRutasDeTekitlaExigenAllowlist (rebanadas 1 y 3a, issues 011 a 013): las 20 rutas del
 // contrato están expuestas, ninguna es pública ni se abre sin el rol de la
 // allowlist, y las escrituras tienen un rate limit más estricto que las
 // lecturas.
@@ -111,11 +111,13 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		"GET /v1/projects", "POST /v1/projects",
 		"GET /v1/projects/{project_id}/issues", "POST /v1/projects/{project_id}/issues",
 		"GET /v1/projects/{project_id}/issues/{number}", "POST /v1/projects/{project_id}/issues/{number}:move",
+		"POST /v1/projects/{project_id}/issues/{number}:discard", "POST /v1/projects/{project_id}/issues/{number}:restore",
 		"PATCH /v1/projects/{project_id}/issues/{number}",
 		"POST /v1/projects/{project_id}/issues/{number}/comments",
 		"GET /v1/projects/{project_id}/issues/{number}/events",
 		"GET /v1/projects/{project_id}/statuses", "POST /v1/projects/{project_id}/statuses",
 		"PATCH /v1/projects/{project_id}/statuses/{status_id}", "DELETE /v1/projects/{project_id}/statuses/{status_id}",
+		"POST /v1/projects/{project_id}/statuses:batchUpdate",
 		"GET /v1/projects/{project_id}/labels", "POST /v1/projects/{project_id}/labels",
 		"PATCH /v1/projects/{project_id}/labels/{label_id}", "DELETE /v1/projects/{project_id}/labels/{label_id}",
 	}

@@ -17,11 +17,11 @@
 
 ## Rutas de Tekitla
 
-Las 17 de `issues.v1.IssueService` (tekitla-protos `v0.3.0`: rebanada 1 y 3a),
-todas con `roles: [allowlist]` (docs/auth.md). Lecturas: bucket global
-(600/min, ráfaga 100). Escrituras: body ≤ 64 KiB (`UpdateIssue`, 128 KiB por la
-descripción), timeout 5 s (`DeleteStatus`, 10 s: mueve issues) y bucket propio
-por usuario.
+Las 20 de `issues.v1.IssueService` (tekitla-protos `v0.4.0`: rebanada 1, 3a e
+issues 011 a 013), todas con `roles: [allowlist]` (docs/auth.md). Lecturas:
+bucket global (600/min, ráfaga 100). Escrituras: body ≤ 64 KiB (`UpdateIssue`,
+128 KiB por la descripción), timeout 5 s (`DeleteStatus` y
+`BatchUpdateStatuses`, 10 s: mueven issues) y bucket propio por usuario.
 
 | Método | Ruta | Rate limit |
 |---|---|---|
@@ -31,6 +31,8 @@ por usuario.
 | `GetIssue` | `GET /v1/projects/{project_id}/issues/{number}` | global |
 | `CreateIssue` | `POST /v1/projects/{project_id}/issues` | 60/min, ráfaga 20 |
 | `MoveIssue` | `POST /v1/projects/{project_id}/issues/{number}:move` | 120/min, ráfaga 30 |
+| `DiscardIssue` | `POST /v1/projects/{project_id}/issues/{number}:discard` | 60/min, ráfaga 20 |
+| `RestoreIssue` | `POST /v1/projects/{project_id}/issues/{number}:restore` | 60/min, ráfaga 20 |
 | `UpdateIssue` | `PATCH /v1/projects/{project_id}/issues/{number}` | 120/min, ráfaga 30 |
 | `CreateComment` | `POST /v1/projects/{project_id}/issues/{number}/comments` | 60/min, ráfaga 20 |
 | `ListIssueEvents` | `GET /v1/projects/{project_id}/issues/{number}/events` | global |
@@ -38,10 +40,24 @@ por usuario.
 | `CreateStatus` | `POST /v1/projects/{project_id}/statuses` | 30/min, ráfaga 10 |
 | `UpdateStatus` | `PATCH /v1/projects/{project_id}/statuses/{status_id}` | 30/min, ráfaga 10 |
 | `DeleteStatus` | `DELETE /v1/projects/{project_id}/statuses/{status_id}` | 30/min, ráfaga 10 |
+| `BatchUpdateStatuses` | `POST /v1/projects/{project_id}/statuses:batchUpdate` | 30/min, ráfaga 10 |
 | `ListLabels` | `GET /v1/projects/{project_id}/labels` | global |
 | `CreateLabel` | `POST /v1/projects/{project_id}/labels` | 30/min, ráfaga 10 |
 | `UpdateLabel` | `PATCH /v1/projects/{project_id}/labels/{label_id}` | 30/min, ráfaga 10 |
 | `DeleteLabel` | `DELETE /v1/projects/{project_id}/labels/{label_id}` | 30/min, ráfaga 10 |
+
+Búsqueda, filtros y orden de `ListIssues` (issue 012) van en la query string,
+con los nombres del `.proto`. Las listas repiten el parámetro y los enums
+aceptan el nombre o el número:
+
+```
+GET /v1/projects/{project_id}/issues?query=tk-12&states=ISSUE_STATE_TODO&states=ISSUE_STATE_IN_PROGRESS
+    &priorities=PRIORITY_HIGH&label_ids=<id>&status_ids=<id>&order_by=ISSUE_ORDER_UPDATED_DESC
+    &page.limit=50&page.cursor=<next_cursor>
+```
+
+El cursor sirve solo con los mismos filtros y orden: con otros responde
+`INVALID_ARGUMENT` y el cliente vuelve a la primera página.
 
 ## routes.yaml
 
@@ -129,8 +145,11 @@ Formato único para todo lo que responde el gateway:
   | `code` | `reason` | Cuándo |
   |---|---|---|
   | `FAILED_PRECONDITION` | `STALE_ORDER` | reordenar con vecinos que ya no están en la columna o en ese orden (refrescar y reintentar) |
-  | `FAILED_PRECONDITION` | `LAST_STATUS_OF_CATEGORY` | borrar el último estado de una categoría |
-  | `FAILED_PRECONDITION` | `STATUS_HAS_ISSUES` | borrar un estado con issues sin `move_to_status_id` |
+  | `FAILED_PRECONDITION` | `LAST_STATUS_OF_CATEGORY` | borrar el último estado de una categoría (también en `BatchUpdateStatuses`) |
+  | `FAILED_PRECONDITION` | `STATUS_HAS_ISSUES` | borrar un estado con issues sin `move_to_status_id` (también en `BatchUpdateStatuses`) |
+  | `FAILED_PRECONDITION` | `STALE_STATUSES` | `BatchUpdateStatuses` sin un estado que existe: otro lo creó, recargar |
+  | `FAILED_PRECONDITION` | `ISSUE_ALREADY_DISCARDED` | `DiscardIssue` de un issue que ya está en un estado `CANCELED` |
+  | `FAILED_PRECONDITION` | `ISSUE_NOT_DISCARDED` | `RestoreIssue` de un issue que no está en un estado `CANCELED` |
   | `ALREADY_EXISTS` | `STATUS_NAME_TAKEN` | nombre de estado repetido en el proyecto |
   | `ALREADY_EXISTS` | `LABEL_NAME_TAKEN` | nombre de etiqueta repetido en el proyecto |
   | `ALREADY_EXISTS` | `PROJECT_KEY_TAKEN` | key de proyecto repetida en el espacio |

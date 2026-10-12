@@ -91,6 +91,21 @@ routes:
     rate_limit:
       per_minute: 120
       burst: 30
+  # Issue 011: descartar (con motivo) y restaurar.
+  issues.v1.IssueService/DiscardIssue:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 60
+      burst: 20
+  issues.v1.IssueService/RestoreIssue:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 60
+      burst: 20
 
   # Rebanada 3a. UpdateIssue acepta la descripción completa (20 000
   # caracteres): body de hasta 128 KiB.
@@ -128,6 +143,15 @@ routes:
       burst: 10
 
   issues.v1.IssueService/DeleteStatus:
+    roles: [allowlist]
+    timeout: 10s
+    max_body_bytes: 65536
+    rate_limit:
+      per_minute: 30
+      burst: 10
+  # Issue 013: Ajustes › Estados de una vez (hasta 20 estados; puede mover
+  # issues de los borrados, como DeleteStatus).
+  issues.v1.IssueService/BatchUpdateStatuses:
     roles: [allowlist]
     timeout: 10s
     max_body_bytes: 65536
