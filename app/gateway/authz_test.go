@@ -101,7 +101,7 @@ func TestRutasDeLaTablaExisten(t *testing.T) {
 	}
 }
 
-// TestRutasDeTekitlaExigenAllowlist (rebanadas 1 y 3a, issues 011 a 013): las 20 rutas del
+// TestRutasDeTekitlaExigenAllowlist (rebanadas 1 y 3a, issues 011 y 013): las 20 rutas del
 // contrato están expuestas, ninguna es pública ni se abre sin el rol de la
 // allowlist, y las escrituras tienen un rate limit más estricto que las
 // lecturas.

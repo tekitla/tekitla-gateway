@@ -51,8 +51,14 @@ routes:
   issues.v1.IssueService/ListProjects:
     roles: [allowlist]
 
+  # Issue 012: ListIssues también busca (query, filtros): bucket propio, más
+  # estricto que el global pero holgado para el tablero y la búsqueda mientras
+  # se escribe (el panel la demora).
   issues.v1.IssueService/ListIssues:
     roles: [allowlist]
+    rate_limit:
+      per_minute: 300
+      burst: 60
 
   issues.v1.IssueService/GetIssue:
     roles: [allowlist]
@@ -99,10 +105,11 @@ routes:
     rate_limit:
       per_minute: 60
       burst: 20
+  # Sin campos en el body (todo va en el path): {} o vacío.
   issues.v1.IssueService/RestoreIssue:
     roles: [allowlist]
     timeout: 5s
-    max_body_bytes: 65536
+    max_body_bytes: 1024
     rate_limit:
       per_minute: 60
       burst: 20
@@ -149,8 +156,9 @@ routes:
     rate_limit:
       per_minute: 30
       burst: 10
-  # Issue 013: Ajustes › Estados de una vez (hasta 20 estados; puede mover
-  # issues de los borrados, como DeleteStatus).
+  # Issue 013: Ajustes › Estados de una vez. El servicio acepta hasta 20
+  # estados en el resultado y lo valida todo en una transacción (puede mover
+  # issues de los borrados, como DeleteStatus); acá el único tope es el body.
   issues.v1.IssueService/BatchUpdateStatuses:
     roles: [allowlist]
     timeout: 10s

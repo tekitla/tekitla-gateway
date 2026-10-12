@@ -4,7 +4,7 @@
 
 Entrada pública REST de Tekitla: autentica con Firebase y traduce a gRPC.
 
-Tekitla (issue 002, rebanadas 1 y 3a): expone `issues.v1.IssueService`
+Tekitla (issue 002, rebanadas 1 y 3a, e issues 011 a 013): expone `issues.v1.IssueService`
 (`github.com/tekitla/tekitla-protos@v0.4.0`) del servicio `tekitla-issues`
 (`UPSTREAM_ISSUES_ADDR`, gRPC :5000). Las 20 rutas (`docs/rutas.md`) exigen el rol `allowlist`,
 que **no** sale del token: lo otorga `auth.EmailAllowlist` solo a los emails

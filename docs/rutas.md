@@ -18,8 +18,9 @@
 ## Rutas de Tekitla
 
 Las 20 de `issues.v1.IssueService` (tekitla-protos `v0.4.0`: rebanada 1, 3a e
-issues 011 a 013), todas con `roles: [allowlist]` (docs/auth.md). Lecturas:
-bucket global (600/min, ráfaga 100). Escrituras: body ≤ 64 KiB (`UpdateIssue`,
+issues 011 y 013; el 012 suma parámetros a `ListIssues`), todas con
+`roles: [allowlist]` (docs/auth.md). Lecturas: bucket global (600/min, ráfaga
+100), salvo `ListIssues`. Escrituras: body ≤ 64 KiB (`UpdateIssue`,
 128 KiB por la descripción), timeout 5 s (`DeleteStatus` y
 `BatchUpdateStatuses`, 10 s: mueven issues) y bucket propio por usuario.
 
@@ -27,7 +28,7 @@ bucket global (600/min, ráfaga 100). Escrituras: body ≤ 64 KiB (`UpdateIssue`
 |---|---|---|
 | `ListProjects` | `GET /v1/projects` | global |
 | `CreateProject` | `POST /v1/projects` | 30/min, ráfaga 10 |
-| `ListIssues` | `GET /v1/projects/{project_id}/issues` | global |
+| `ListIssues` | `GET /v1/projects/{project_id}/issues` | 300/min, ráfaga 60 (también busca) |
 | `GetIssue` | `GET /v1/projects/{project_id}/issues/{number}` | global |
 | `CreateIssue` | `POST /v1/projects/{project_id}/issues` | 60/min, ráfaga 20 |
 | `MoveIssue` | `POST /v1/projects/{project_id}/issues/{number}:move` | 120/min, ráfaga 30 |
@@ -56,8 +57,10 @@ GET /v1/projects/{project_id}/issues?query=tk-12&states=ISSUE_STATE_TODO&states=
     &page.limit=50&page.cursor=<next_cursor>
 ```
 
-El cursor sirve solo con los mismos filtros y orden: con otros responde
-`INVALID_ARGUMENT` y el cliente vuelve a la primera página.
+`state` (una sola categoría, el de v0.3) sigue valiendo, pero no junto con
+`states`: los dos a la vez son `INVALID_ARGUMENT`. El cursor sirve solo con
+los mismos filtros y orden: con otros responde `INVALID_ARGUMENT` y el cliente
+vuelve a la primera página.
 
 ## routes.yaml
 
