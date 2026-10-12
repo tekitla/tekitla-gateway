@@ -42,8 +42,8 @@ docker login ghcr.io -u <usuario> --password-stdin
 | Variable | Ejemplo | Notas |
 |---|---|---|
 | `IMAGE_TAG` | `qa` / `prod` | Tag móvil. Rollback: un tag inmutable (`prod-v1.2.2`) + Redeploy |
-| `UPSTREAM_ISSUES_ADDR` | `<contenedor-de-tekitla-issues>:5000` | `docker ps` en el VPS muestra el nombre (incluye el UUID del recurso) |
-| `CORS_ALLOWED_ORIGINS` | prod: `https://tekitla.victorrb1015.com` | Orígenes exactos del front de ESE entorno, separados por coma. Nunca `*`. QA: el sitio de Firebase Hosting de QA (a definir, p. ej. `https://<sitio-qa>.web.app`) |
+| `UPSTREAM_ISSUES_ADDR` | `app-<UUID-del-recurso-de-tekitla-issues>:5000` | Con la red predefinida, Coolify nombra los contenedores `<servicio>-<UUID del recurso>` (el servicio de tekitla-issues es `app`). Confirmalo con `docker ps` en el VPS. No uses `app` a secas: en la red compartida puede haber más de uno |
+| `CORS_ALLOWED_ORIGINS` | prod: `https://tekitla.victorrb1015.com,https://tekitla-app.web.app,https://tekitla-app.firebaseapp.com` | Orígenes exactos del front de ESE entorno, separados por coma, sin `/` final. Nunca `*`. El panel de prod se sirve desde los tres (dominio propio y los dos de Firebase Hosting). QA: el sitio de Firebase Hosting de QA (a definir, p. ej. `https://<sitio-qa>.web.app`) |
 | `FIREBASE_PROJECT_ID` | `tekitla-app` | El proyecto de Firebase de ESE entorno |
 | `AUTH_ALLOWED_EMAILS` | `victor@ejemplo.com` | **Obligatoria.** Emails verificados que pueden usar la API, separados por coma. Fuera de la lista → 403; vacía → nadie entra (docs/auth.md) |
 | `APP_ENV` / `SERVICE_ENV` / `LOG_LEVEL` | `production` / `qa` / `info` | Opcionales (defaults de prod) |
@@ -68,20 +68,27 @@ Settings > Secrets and variables > Actions: variables `COOLIFY_URL`,
 `COOLIFY_RESOURCE_UUID_QA`, `COOLIFY_RESOURCE_UUID_PROD`; secret
 `COOLIFY_TOKEN`. Environments `qa`/`prod` (prod: solo tags `prod-v*` y
 reviewers).
-Secret `PROTOS_TOKEN` (lectura del repo de protos).
+Secret `PROTOS_TOKEN` (lectura del repo de protos): hoy no hace falta,
+porque `tekitla/tekitla-protos` es público; si pasa a privado, es obligatorio.
 
 ## 5. Verificar
 
 ```bash
-curl -sI https://api.qa.ejemplo.com/healthz          # 200 + cabeceras de seguridad
-curl -s  https://api.qa.ejemplo.com/readyz           # {"status":"ok"} si llega a los upstreams
-curl -s  https://api.qa.ejemplo.com/v1/projects      # 401 sin token (todas las rutas son privadas)
-curl -s  -X OPTIONS https://api.qa.ejemplo.com/v1/projects   -H 'Origin: https://tekitla.victorrb1015.com' -H 'Access-Control-Request-Method: GET' -D - -o /dev/null
+API=https://api.tekitla.victorrb1015.com             # QA: https://api-qa.tekitla.victorrb1015.com
+curl -sI $API/healthz          # 200 + cabeceras de seguridad
+curl -s  $API/readyz           # {"status":"ok"} si llega a los upstreams
+curl -s  $API/v1/projects      # 401 sin token (todas las rutas son privadas)
+curl -s  -X OPTIONS $API/v1/projects -H 'Origin: https://tekitla-app.web.app' -H 'Access-Control-Request-Method: GET' -D - -o /dev/null
                                                       # Access-Control-Allow-Origin solo si el origen está en la lista
 ```
 
 `/readyz` en `unavailable`: revisar `UPSTREAM_*_ADDR` y que los dos recursos
 estén en la red predefinida (`docker network inspect coolify`).
+
+DNS: un registro `A` (o `CNAME`) de `api.tekitla.victorrb1015.com` (y
+`api-qa…` cuando exista QA) hacia la IP del VPS, **antes** de asignar el
+dominio: Traefik pide el certificado de Let's Encrypt en cuanto lo ve y falla
+si el nombre todavía no resuelve.
 
 ## Mudar a Cloud Run
 
