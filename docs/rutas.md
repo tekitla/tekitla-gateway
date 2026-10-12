@@ -15,11 +15,13 @@
    `Register...Handler` generada y nombre del upstream → `UPSTREAM_<NAME>_ADDR`).
 3. **Autorización**: `routes.yaml`, **denegar por defecto**.
 
-## Rutas de Tekitla (rebanada 1)
+## Rutas de Tekitla
 
-Las 6 de `issues.v1.IssueService` (tekitla-protos `v0.2.0`), todas con
-`roles: [allowlist]` (docs/auth.md). Lecturas: bucket global (600/min, ráfaga
-100). Escrituras: body ≤ 64 KiB, timeout 5 s y bucket propio por usuario.
+Las 17 de `issues.v1.IssueService` (tekitla-protos `v0.3.0`: rebanada 1 y 3a),
+todas con `roles: [allowlist]` (docs/auth.md). Lecturas: bucket global
+(600/min, ráfaga 100). Escrituras: body ≤ 64 KiB (`UpdateIssue`, 128 KiB por la
+descripción), timeout 5 s (`DeleteStatus`, 10 s: mueve issues) y bucket propio
+por usuario.
 
 | Método | Ruta | Rate limit |
 |---|---|---|
@@ -29,6 +31,17 @@ Las 6 de `issues.v1.IssueService` (tekitla-protos `v0.2.0`), todas con
 | `GetIssue` | `GET /v1/projects/{project_id}/issues/{number}` | global |
 | `CreateIssue` | `POST /v1/projects/{project_id}/issues` | 60/min, ráfaga 20 |
 | `MoveIssue` | `POST /v1/projects/{project_id}/issues/{number}:move` | 120/min, ráfaga 30 |
+| `UpdateIssue` | `PATCH /v1/projects/{project_id}/issues/{number}` | 120/min, ráfaga 30 |
+| `CreateComment` | `POST /v1/projects/{project_id}/issues/{number}/comments` | 60/min, ráfaga 20 |
+| `ListIssueEvents` | `GET /v1/projects/{project_id}/issues/{number}/events` | global |
+| `ListStatuses` | `GET /v1/projects/{project_id}/statuses` | global |
+| `CreateStatus` | `POST /v1/projects/{project_id}/statuses` | 30/min, ráfaga 10 |
+| `UpdateStatus` | `PATCH /v1/projects/{project_id}/statuses/{status_id}` | 30/min, ráfaga 10 |
+| `DeleteStatus` | `DELETE /v1/projects/{project_id}/statuses/{status_id}` | 30/min, ráfaga 10 |
+| `ListLabels` | `GET /v1/projects/{project_id}/labels` | global |
+| `CreateLabel` | `POST /v1/projects/{project_id}/labels` | 30/min, ráfaga 10 |
+| `UpdateLabel` | `PATCH /v1/projects/{project_id}/labels/{label_id}` | 30/min, ráfaga 10 |
+| `DeleteLabel` | `DELETE /v1/projects/{project_id}/labels/{label_id}` | 30/min, ráfaga 10 |
 
 ## routes.yaml
 
