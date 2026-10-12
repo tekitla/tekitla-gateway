@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -40,6 +41,9 @@ var genericMessages = map[codes.Code]string{
 
 const maxClientMessage = 300
 
+// maxReason: un reason más largo (o que no sea UPPER_SNAKE) no se reenvía.
+const maxReason = 64
+
 // errorHandler: errores de la llamada gRPC (o de grpc-gateway al armar el
 // request) -> formato único. Los 5xx van al log con el detalle real y el
 // request_id; al cliente, mensaje genérico + request_id.
@@ -55,8 +59,9 @@ func (g *gw) errorHandler(ctx context.Context, _ *runtime.ServeMux, _ runtime.Ma
 		httpStatus = runtime.HTTPStatusFromCode(code)
 	}
 
-	msg := genericMessages[code]
+	msg, reason := genericMessages[code], ""
 	if clientCodes[code] && httpStatus < 500 {
+		reason = reasonOf(st)
 		msg = st.Message()
 		if len(msg) > maxClientMessage {
 			msg = msg[:maxClientMessage]
@@ -74,7 +79,36 @@ func (g *gw) errorHandler(ctx context.Context, _ *runtime.ServeMux, _ runtime.Ma
 			slog.String("grpc_message", st.Message()),
 		)
 	}
-	apierror.Write(w, r, httpStatus, codeName(code), msg)
+	apierror.WriteReason(w, r, httpStatus, codeName(code), msg, reason)
+}
+
+// reasonOf: el Reason del primer google.rpc.ErrorInfo del status, si es
+// UPPER_SNAKE y corto. Domain y Metadata no salen: pueden llevar datos
+// internos del servicio (OWASP API3).
+func reasonOf(st *status.Status) string {
+	for _, d := range st.Details() {
+		info, ok := d.(*errdetails.ErrorInfo)
+		if !ok {
+			continue
+		}
+		if r := info.GetReason(); validReason(r) {
+			return r
+		}
+		return ""
+	}
+	return ""
+}
+
+func validReason(r string) bool {
+	if r == "" || len(r) > maxReason || r[0] < 'A' || r[0] > 'Z' {
+		return false
+	}
+	for i := 0; i < len(r); i++ {
+		if c := r[i]; !(c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_') {
+			return false
+		}
+	}
+	return true
 }
 
 // streamErrorHandler: errores a mitad de un server streaming.
