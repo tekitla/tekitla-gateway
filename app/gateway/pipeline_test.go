@@ -262,7 +262,7 @@ func TestReasonDelErrorInfo(t *testing.T) {
 		t.Fatalf("el body filtra domain o metadata: %s", w.Body.String())
 	}
 
-	// Sin ErrorInfo: sin campo reason (los clientes de hoy no cambian).
+	// Sin ErrorInfo: sin campo reason.
 	e.up.set(status.Error(codes.AlreadyExists, "ya existe"), 0)
 	w = e.do(method, path, body)
 	if w.Code != http.StatusConflict || strings.Contains(w.Body.String(), `"reason"`) {
@@ -276,11 +276,19 @@ func TestReasonDelErrorInfo(t *testing.T) {
 		t.Fatalf("reason inválido: %d %s", w.Code, w.Body.String())
 	}
 
+	// Reason igual al código (lo que manda el servicio sin WithReason): no sale.
+	e.up.set(withInfo(t, codes.NotFound, "no existe", &errdetails.ErrorInfo{Reason: "NOT_FOUND"}), 0)
+	w = e.do(method, path, body)
+	if w.Code != http.StatusNotFound || strings.Contains(w.Body.String(), `"reason"`) {
+		t.Fatalf("reason igual al código: %d %s", w.Code, w.Body.String())
+	}
+
 	// 5xx: ni mensaje ni reason del servicio.
 	e.up.set(withInfo(t, codes.Internal, "pq: boom", &errdetails.ErrorInfo{Reason: "DB_DOWN"}), 0)
 	w = e.do(method, path, body)
-	if w.Code != http.StatusInternalServerError || strings.Contains(w.Body.String(), "DB_DOWN") {
-		t.Fatalf("5xx con reason: %d %s", w.Code, w.Body.String())
+	if w.Code != http.StatusInternalServerError || strings.Contains(w.Body.String(), `"reason"`) ||
+		strings.Contains(w.Body.String(), "pq: boom") {
+		t.Fatalf("5xx con reason o mensaje interno: %d %s", w.Code, w.Body.String())
 	}
 }
 

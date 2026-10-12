@@ -119,9 +119,12 @@ Formato único para todo lo que responde el gateway:
 - `reason` (opcional): en esos 4xx, el `reason` del `google.rpc.ErrorInfo`
   que manda el servicio, para distinguir errores con el mismo `code`. El
   cliente decide con `code` + `reason`, nunca con `message` (es para
-  humanos). Solo se reenvía si es `UPPER_SNAKE` de hasta 64 caracteres; sin
-  `ErrorInfo`, el campo no viene. `domain` y `metadata` del `ErrorInfo` no
-  salen: pueden llevar datos internos. Los de `tekitla-issues`:
+  humanos). Solo viene si el `reason` tiene el formato de `ErrorInfo`
+  (`[A-Z][A-Z0-9_]+[A-Z0-9]`, hasta 63 caracteres) y dice algo más que el
+  `code`: sin `ErrorInfo`, o con `reason` igual al `code` (`NOT_FOUND`), el
+  campo no viene. `domain` y `metadata` del `ErrorInfo` no salen, tampoco en
+  los errores a mitad de un stream: pueden llevar datos internos. Los de
+  `tekitla-issues`:
 
   | `code` | `reason` | Cuándo |
   |---|---|---|
@@ -131,8 +134,6 @@ Formato único para todo lo que responde el gateway:
   | `ALREADY_EXISTS` | `STATUS_NAME_TAKEN` | nombre de estado repetido en el proyecto |
   | `ALREADY_EXISTS` | `LABEL_NAME_TAKEN` | nombre de etiqueta repetido en el proyecto |
   | `ALREADY_EXISTS` | `PROJECT_KEY_TAKEN` | key de proyecto repetida en el espacio |
-
-  Los demás errores de dominio traen como `reason` el mismo `code` (`NOT_FOUND`, `INVALID_ARGUMENT`...): no agrega información.
 - Todo 5xx (`INTERNAL`, `UNKNOWN`, `UNAVAILABLE`, `DEADLINE_EXCEEDED`...)
   sale con un mensaje **genérico**; el detalle real queda en el log con el
   mismo `request_id`. Nunca stack traces ni mensajes internos.
