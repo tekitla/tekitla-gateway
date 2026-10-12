@@ -4,9 +4,9 @@
 
 Entrada pública REST de Tekitla: autentica con Firebase y traduce a gRPC.
 
-Tekitla (issue 002, rebanadas 1 y 3a): expone `issues.v1.IssueService`
-(`github.com/tekitla/tekitla-protos@v0.3.0`) del servicio `tekitla-issues`
-(`UPSTREAM_ISSUES_ADDR`, gRPC :5000). Las 17 rutas (`docs/rutas.md`) exigen el rol `allowlist`,
+Tekitla (issue 002, rebanadas 1 y 3a, e issues 011 a 013): expone `issues.v1.IssueService`
+(`github.com/tekitla/tekitla-protos@v0.4.0`) del servicio `tekitla-issues`
+(`UPSTREAM_ISSUES_ADDR`, gRPC :5000). Las 20 rutas (`docs/rutas.md`) exigen el rol `allowlist`,
 que **no** sale del token: lo otorga `auth.EmailAllowlist` solo a los emails
 verificados de `AUTH_ALLOWED_EMAILS` (vacía = nadie entra). Nada público
 salvo `/healthz` y `/readyz`.
@@ -53,7 +53,7 @@ Detalle: `docs/rutas.md`; auth: `docs/auth.md`.
 
 ## Repo de protos
 
-`github.com/tekitla/tekitla-protos` (hoy `v0.3.0`): el handler sale de
+`github.com/tekitla/tekitla-protos` (hoy `v0.4.0`): el handler sale de
 `<módulo>/gen/go/issues/v1` (`app/upstream/registry.go`) y el OpenAPI de
 `<módulo>/gen/openapi` (`cli/main.go`). Ya no hay `proto/`, `gen/` ni `buf.*`
 locales. Versión nueva: `go get github.com/tekitla/tekitla-protos@<tag>`. Sin
