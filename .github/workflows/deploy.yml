@@ -60,9 +60,30 @@ jobs:
           docker push "$IMAGE:$IMAGE_TAG"
           docker push "$IMAGE:$TARGET_ENV"
 
+      # Coolify >= 4.6 solo acepta POST en /api/v1/deploy (GET responde 405).
       - name: Deploy (Coolify)
         run: |
-          curl -fsS "$COOLIFY_URL/api/v1/deploy?uuid=$COOLIFY_RESOURCE_UUID&force=false" \
-            -H "Authorization: Bearer $COOLIFY_TOKEN"
-          echo
+          echo "Deploy ${TARGET_ENV} (${IMAGE_TAG}) en Coolify"
+          resp="$RUNNER_TEMP/coolify-deploy.json"
+          if ! status="$(curl -sS -o "$resp" -w '%{http_code}' -X POST --data '' \
+              "$COOLIFY_URL/api/v1/deploy?uuid=$COOLIFY_RESOURCE_UUID&force=false" \
+              -H "Authorization: Bearer $COOLIFY_TOKEN" \
+              -H "Accept: application/json")"; then
+            echo "::error::No se pudo llamar a la API de Coolify en $COOLIFY_URL (red/DNS/TLS)."
+            exit 1
+          fi
+          cat "$resp"; echo
+          case "$status" in
+            2??) ;;
+            401|400) hint="COOLIFY_TOKEN inválido o vencido" ;;
+            403) hint="el token no tiene el permiso deploy" ;;
+            404) hint="no hay recurso con COOLIFY_RESOURCE_UUID_${TARGET_ENV^^} (o el token es de otro equipo)" ;;
+            405) hint="método no permitido: Coolify >= 4.6 pide POST" ;;
+            429) hint="cola de deploys llena: reintentá en un minuto" ;;
+            *) hint="respuesta inesperada" ;;
+          esac
+          if [ "${status:0:1}" != 2 ]; then
+            echo "::error::Coolify respondió HTTP $status al pedir el deploy: $hint."
+            exit 1
+          fi
           echo "Deploy encolado en Coolify. Seguilo en el panel (Deployments) del recurso."

@@ -33,7 +33,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.26.9"
+  GO_VERSION: "1.26.10"
   GOVULNCHECK_VERSION: v1.8.0
   TRIVY_IMAGE: aquasec/trivy:0.74.0
   GOWORK: "off"
