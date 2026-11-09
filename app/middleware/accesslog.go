@@ -39,8 +39,16 @@ func AccessLog(log *slog.Logger) func(http.Handler) http.Handler {
 				if info.Method != "" {
 					attrs = append(attrs, slog.String("route", info.Method))
 				}
-				if info.Identity != nil {
-					attrs = append(attrs, slog.String("user_id", info.Identity.Subject))
+				if id := info.Identity; id != nil {
+					// Auditoría (ADR 0009): persona, agente y token, nunca el
+					// token ni su hash.
+					attrs = append(attrs, slog.String("user_id", id.Subject), slog.String("auth", id.Kind))
+					if id.AgentID != "" {
+						attrs = append(attrs, slog.String("agent_id", id.AgentID))
+					}
+					if id.TokenID != "" {
+						attrs = append(attrs, slog.String("token_id", id.TokenID))
+					}
 				}
 			}
 			if log.Enabled(r.Context(), slog.LevelDebug) {

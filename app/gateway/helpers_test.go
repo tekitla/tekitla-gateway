@@ -3,6 +3,7 @@ package gateway_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -120,6 +122,53 @@ type creds struct {
 	authn auth.Authenticator
 
 	issuer *authtest.Issuer
+	// tokens: tokens tka_ de prueba (resolver falso de tekitla-issues).
+	tokens *fakeTokens
+}
+
+// fakeTokens es un auth.TokenResolver en memoria: token en claro ->
+// resolución (nil = inválido). Cuenta las llamadas para probar la caché.
+type fakeTokens struct {
+	mu    sync.Mutex
+	byTok map[string]*auth.TokenResolution
+	calls int
+	fail  error
+}
+
+func (f *fakeTokens) ResolveToken(_ context.Context, tok string) (*auth.TokenResolution, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls++
+	if f.fail != nil {
+		return nil, f.fail
+	}
+	if res, ok := f.byTok[tok]; ok && res != nil {
+		return res, nil
+	}
+	return nil, auth.ErrInvalidCredentials
+}
+
+func (f *fakeTokens) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+// add registra un token tka_ nuevo de la persona sub (agente opcional) con
+// esos scopes y lo devuelve.
+func (f *fakeTokens) add(sub, agent string, scopes ...string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	tok := auth.TokenPrefix + fmt.Sprintf("%043d", len(f.byTok)+1)
+	f.byTok[tok] = &auth.TokenResolution{UserID: sub, AgentID: agent, TokenID: fmt.Sprintf("tok-%d", len(f.byTok)+1),
+		Scopes: scopes, ExpiresAt: time.Now().Add(24 * time.Hour)}
+	return tok
+}
+
+func (f *fakeTokens) revoke(tok string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.byTok[tok] = nil
 }
 
 const testProject = "proyecto-test"
@@ -140,14 +189,25 @@ func newCreds(t *testing.T, _ *routes.Table) *creds {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &creds{issuer: is, authn: allow}
+	// Mismo armado que cli/main.go: tka_ a tekitla-issues, el resto a Firebase.
+	tokens := &fakeTokens{byTok: map[string]*auth.TokenResolution{}}
+	authn := auth.TokenOrJWT{Tokens: auth.NewTekitlaTokens(tokens), JWT: allow}
+	return &creds{issuer: is, authn: authn, tokens: tokens}
 }
 
 // header devuelve (nombre, valor) de una credencial válida con esos roles
 // (sin roles = válida pero sin permisos). El rol auth.AllowlistRole no viaja
 // como claim (el gateway lo ignora): se obtiene con el email permitido y
 // verificado.
+//
+// Los scopes de token (issues:read, issues:write) solo los da un token tka_:
+// con alguno de ellos se emite un token de Tekitla de un agente de sub.
 func (c *creds) header(sub string, roles ...string) (string, string) {
+	for _, r := range roles {
+		if slices.Contains(auth.TokenScopes, r) {
+			return "Authorization", "Bearer " + c.tokens.add(sub, "agente-de-"+sub, roles...)
+		}
+	}
 	tokenRoles := []string{}
 	email := ""
 	for _, r := range roles {

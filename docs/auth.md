@@ -6,15 +6,17 @@ identidad y se la pasa a los servicios como metadata gRPC:
 
 | Metadata | Valor |
 |---|---|
-| `x-user-id` | `sub` del token, o `apikey:<id>` |
-| `x-roles` | roles del token o scopes de la key, separados por coma |
-| `x-auth-type` | `jwt` \| `apikey` |
+| `x-user-id` | `sub` del token, `apikey:<id>`, o el uid de la persona dueña de un token `tka_` |
+| `x-agent-id` | id del agente, solo con un token `tka_` de agente (issue 025) |
+| `x-roles` | roles del token o scopes de la key / del token `tka_`, separados por coma |
+| `x-auth-type` | `jwt` \| `apikey` \| `token` |
 | `x-request-id` | id del request (también en la respuesta, `X-Request-Id`) |
 | `x-client-ip` | IP del cliente según `TRUSTED_PROXY_HOPS` |
 
 Los servicios **solo** reciben eso: ninguna cabecera del cliente pasa tal cual
-(tampoco `Authorization`), y si el cliente manda `X-User-Id`, `X-Roles` o
-`Grpc-Metadata-*`, el gateway las borra antes de armar la metadata. Los
+(tampoco `Authorization`), y si el cliente manda `X-User-Id`, `X-Agent-Id`,
+`X-Roles` o `Grpc-Metadata-*`, el gateway las borra antes de armar la
+metadata. Los
 servicios confían en esta metadata **porque solo el gateway puede llamarlos**
 (red interna de Docker, sin puertos publicados).
 
@@ -62,6 +64,56 @@ servicios (solo `x-user-id` = `uid` de Firebase) ni se escribe en los logs.
 Para sumar a alguien: agregar su email a la variable y redeploy. Cuando haya
 más de un usuario con permisos distintos, pasar a roles por custom claims
 (abajo) y dejar la allowlist como filtro de acceso o retirarla.
+
+## Tokens de Tekitla (`tka_`, issue 025)
+
+Decisión en el ADR 0009 del repo docs. Los emite `tekitla-issues`
+(`ActorService.CreateToken`, solo con sesión de Firebase) a nombre de una
+persona o de uno de sus agentes; el servicio guarda solo el SHA-256. El
+cliente los manda como `Authorization: Bearer tka_…` (un header fijo, como
+piden los clientes MCP).
+
+- **Elección del verificador** (`auth.TokenOrJWT`): un bearer que empieza con
+  `tka_` va a `auth.TekitlaTokens`; cualquier otro, a Firebase + allowlist.
+- **Validación:** largo exacto (`tka_` + 43) antes de consultar nada; después
+  `issues.v1.TokenAuthService/ResolveToken` (interno, sin ruta REST) por la
+  conexión a `UPSTREAM_ISSUES_ADDR`, como llamada interna (sin metadata del
+  cliente) y con 3 s de timeout.
+- **Caché** (`app/auth/tekitla_token.go`): por SHA-256 del token, **60 s
+  como máximo** y nunca más allá de su vencimiento. Es la demora de una
+  revocación. Los rechazos también se guardan 60 s (un token inexistente no
+  puede pasar a existir), así un intento repetido no consulta al servicio.
+  Hasta 10 000 entradas.
+- **Errores:** `UNAUTHENTICATED` del servicio → `401`; servicio caído o
+  cualquier otra falla → `503` (no se guarda: el próximo request reintenta).
+- **Identidad:** `x-user-id` = la persona dueña, `x-agent-id` = el agente
+  (si es de un agente), `x-roles` = los scopes (`issues:read`,
+  `issues:write`) y `x-auth-type: token`. Un token nunca recibe `allowlist`.
+- **Los scopes solo salen de un token:** si un ID token de Firebase trae
+  `issues:read` o `issues:write` como custom claim, se descartan.
+- **Rate limit:** con un token de agente el bucket es del agente
+  (`agent:<id>`), no de su dueño.
+- **Auditoría:** el access log de cada request con token lleva `user_id`,
+  `agent_id`, `token_id`, `auth`, `route` y `status`. Nunca el token ni su
+  hash.
+- **Sacar a alguien de la allowlist no revoca sus tokens** (el gateway no
+  conoce el email del dueño de un token): hay que revocar también su actor
+  (runbook de la allowlist en el repo docs).
+
+### Revisión contra el OWASP API Top 10 (2023)
+
+| Riesgo | Cómo se cubre |
+|---|---|
+| API1 Autorización por objeto | La sigue haciendo `tekitla-issues` con `x-user-id` (= la persona, también con un token de agente): un proyecto, actor o token ajeno es `NOT_FOUND`. |
+| API2 Autenticación rota | Tokens de 256 bits aleatorios guardados como SHA-256, vencimiento obligatorio (≤ 90 días), revocación en cascada, sin el token en logs ni respuestas; formato validado antes de consultar; `401` sin detalle. |
+| API3 Autorización por propiedad | Las respuestas de tokens nunca traen el secreto ni el hash (solo `CreateToken` devuelve el secreto, una vez). `x-agent-id` lo pone solo el gateway. |
+| API4 Consumo de recursos | Caché positiva y negativa de 60 s (acotada), timeout de 3 s a `ResolveToken`, rate limit por agente y buckets estrictos en `CreateToken`/`CreateAgent` (10/min). |
+| API5 Autorización por función | `routes.yaml`: lecturas con `issues:read`, escrituras con `issues:write` (write no implica read); agentes y tokens solo con `allowlist` (un token no crea agentes ni tokens; el servicio también lo rechaza). `ImportIssue` con `deny: true`. |
+| API6 Flujos de negocio sensibles | Emitir tokens pide sesión de Firebase de la persona; rate limit propio. |
+| API7 SSRF | No aplica: el gateway no hace requests a URLs del cliente. |
+| API8 Configuración | Denegar por defecto; sin variables nuevas; los scopes de token no se pueden obtener por claims. |
+| API9 Inventario | Las rutas nuevas salen de las anotaciones del `.proto` y `TestRutasDeTekitlaExigenAllowlist` fija la lista; `ResolveToken` no tiene ruta REST. |
+| API10 Consumo inseguro de APIs | La respuesta de `ResolveToken` se filtra: solo scopes conocidos, persona obligatoria. |
 
 ## Pruebas locales sin tokens reales (`FIREBASE_JWKS_URL`)
 

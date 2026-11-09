@@ -94,6 +94,10 @@ func (g *gw) routeMiddleware(next runtime.HandlerFunc) runtime.HandlerFunc {
 		key := "ip:" + info.ClientIP
 		if info.Identity != nil {
 			key = "sub:" + info.Identity.Subject
+			if info.Identity.AgentID != "" {
+				// Cada agente tiene su bucket: no gasta el de su dueño.
+				key = "agent:" + info.Identity.AgentID
+			}
 		}
 		bucket := "*"
 		if pol.OwnRateLimit {

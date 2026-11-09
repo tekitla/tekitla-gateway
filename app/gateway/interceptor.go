@@ -17,7 +17,8 @@ import (
 const (
 	MDRequestID = "x-request-id"
 	MDUserID    = "x-user-id"
-	MDRoles     = "x-roles" // separados por coma
+	MDAgentID   = "x-agent-id" // solo con un token de agente (issue 025)
+	MDRoles     = "x-roles"    // separados por coma
 	MDAuthType  = "x-auth-type"
 	MDClientIP  = "x-client-ip"
 )
@@ -67,6 +68,9 @@ func outgoing(ctx context.Context, method string) (context.Context, error) {
 		md.Set(MDUserID, id.Subject)
 		md.Set(MDRoles, strings.Join(id.Roles, ","))
 		md.Set(MDAuthType, id.Kind)
+		if id.AgentID != "" {
+			md.Set(MDAgentID, id.AgentID)
+		}
 	}
 	return metadata.NewOutgoingContext(ctx, md), nil
 }

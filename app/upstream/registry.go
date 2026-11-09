@@ -22,4 +22,10 @@ var Services = []Service{
 		GRPCService: "issues.v1.IssueService",
 		Register:    issuesv1.RegisterIssueServiceHandler,
 	},
+	{
+		// Agentes y tokens de la persona (issue 025): mismo upstream.
+		Name:        "issues",
+		GRPCService: "issues.v1.ActorService",
+		Register:    issuesv1.RegisterActorServiceHandler,
+	},
 }

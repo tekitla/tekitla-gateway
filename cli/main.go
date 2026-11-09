@@ -87,6 +87,14 @@ func run() error {
 		ups = append(ups, gateway.Upstream{Service: svc, Conn: u.Conn})
 	}
 
+	// 4b. Tokens de Tekitla (`tka_`, issue 025): los resuelve tekitla-issues
+	//     por la misma conexión; el resto de los bearer va a Firebase.
+	issuesConn, ok := conns["issues"]
+	if !ok {
+		return errors.New("tokens tka_: falta el upstream issues en app/upstream/registry.go")
+	}
+	authn = auth.TokenOrJWT{Tokens: auth.NewTekitlaTokens(upstream.NewTokenAuth(issuesConn.Conn)), JWT: authn}
+
 	// 5. Handler.
 	var spec []byte
 	if cfg.OpenAPIEnabled {
@@ -125,7 +133,7 @@ func run() error {
 	go func() {
 		log.Info("gateway escuchando",
 			slog.String("addr", srv.Addr),
-			slog.String("auth", "firebase"),
+			slog.String("auth", "firebase+tka"),
 			slog.Int("rutas_declaradas", len(table.Methods())),
 			slog.Int("rutas_http", len(report.Bindings)),
 			slog.Bool("openapi", cfg.OpenAPIEnabled),

@@ -17,9 +17,13 @@
 
 ## Rutas de Tekitla
 
-Las 20 de `issues.v1.IssueService` (tekitla-protos `v0.4.0`: rebanada 1, 3a e
-issues 011 y 013; el 012 suma parámetros a `ListIssues`), todas con
-`roles: [allowlist]` (docs/auth.md). Lecturas: bucket global (600/min, ráfaga
+Las 20 de `issues.v1.IssueService` (tekitla-protos `v0.5.0`: rebanada 1, 3a e
+issues 011, 013 y 025; el 012 suma parámetros a `ListIssues`), con
+`roles: [allowlist, issues:read]` las lecturas y `[allowlist, issues:write]`
+las escrituras (sesión de Firebase en la allowlist **o** un token `tka_` con
+ese scope; docs/auth.md), y las 6 de `issues.v1.ActorService` (issue 025),
+solo con `allowlist`. `ImportIssue` (`/v1/admin/...`) está declarada con
+`deny: true`: no se expone. Lecturas: bucket global (600/min, ráfaga
 100), salvo `ListIssues`. Escrituras: body ≤ 64 KiB (`UpdateIssue`,
 128 KiB por la descripción), timeout 5 s (`DeleteStatus` y
 `BatchUpdateStatuses`, 10 s: mueven issues) y bucket propio por usuario.
@@ -46,6 +50,12 @@ issues 011 y 013; el 012 suma parámetros a `ListIssues`), todas con
 | `CreateLabel` | `POST /v1/projects/{project_id}/labels` | 30/min, ráfaga 10 |
 | `UpdateLabel` | `PATCH /v1/projects/{project_id}/labels/{label_id}` | 30/min, ráfaga 10 |
 | `DeleteLabel` | `DELETE /v1/projects/{project_id}/labels/{label_id}` | 30/min, ráfaga 10 |
+| `ListActors` | `GET /v1/actors` | global (solo `allowlist`) |
+| `CreateAgent` | `POST /v1/agents` | 10/min, ráfaga 5 (solo `allowlist`) |
+| `RevokeActor` | `POST /v1/actors/{actor_id}:revoke` | 10/min, ráfaga 5 (solo `allowlist`) |
+| `ListTokens` | `GET /v1/tokens` | global (solo `allowlist`) |
+| `CreateToken` | `POST /v1/tokens` | 10/min, ráfaga 5 (solo `allowlist`) |
+| `RevokeToken` | `POST /v1/tokens/{token_id}:revoke` | 30/min, ráfaga 10 (solo `allowlist`) |
 
 Búsqueda, filtros y orden de `ListIssues` (issue 012) van en la query string,
 con los nombres del `.proto`. Las listas repiten el parámetro y los enums

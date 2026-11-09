@@ -4,12 +4,18 @@
 
 Entrada pública REST de Tekitla: autentica con Firebase y traduce a gRPC.
 
-Tekitla (issue 002, rebanadas 1 y 3a, e issues 011 a 013): expone `issues.v1.IssueService`
-(`github.com/tekitla/tekitla-protos@v0.4.0`) del servicio `tekitla-issues`
-(`UPSTREAM_ISSUES_ADDR`, gRPC :5000). Las 20 rutas (`docs/rutas.md`) exigen el rol `allowlist`,
+Tekitla (issue 002, rebanadas 1 y 3a, e issues 011 a 013 y 025): expone `issues.v1.IssueService`
+e `issues.v1.ActorService` (`github.com/tekitla/tekitla-protos@v0.5.0`) del servicio `tekitla-issues`
+(`UPSTREAM_ISSUES_ADDR`, gRPC :5000). Las 26 rutas (`docs/rutas.md`) aceptan el rol `allowlist`,
 que **no** sale del token: lo otorga `auth.EmailAllowlist` solo a los emails
-verificados de `AUTH_ALLOWED_EMAILS` (vacía = nadie entra). Nada público
-salvo `/healthz` y `/readyz`.
+verificados de `AUTH_ALLOWED_EMAILS` (vacía = nadie entra). Las de
+`IssueService` aceptan además un token de Tekitla (`Bearer tka_…`, issue 025,
+ADR 0009) con `issues:read` (lecturas) o `issues:write` (escrituras): lo
+resuelve `tekitla-issues` (`TokenAuthService.ResolveToken`, interno) y el
+gateway lo guarda en caché 60 s como máximo; propaga `x-user-id` = la persona
+dueña y `x-agent-id` = el agente. Las de `ActorService` (agentes y tokens)
+piden solo `allowlist`. `ImportIssue` está en `deny`. Nada público salvo
+`/healthz` y `/readyz`.
 
 API gateway Go: **la única puerta pública** de la plataforma. Traduce REST/JSON
 a gRPC con grpc-gateway (rutas desde las anotaciones `google.api.http` de los
@@ -26,11 +32,12 @@ Generado desde la plantilla Copier `api-gateway` (`.copier-answers.yml`).
 | `app/upstream/registry.go` | Servicios gRPC expuestos (`UPSTREAM_<NAME>_ADDR`) |
 | `app/gateway/` | Mux de grpc-gateway + middleware de ruta, errores, interceptor de metadata |
 | `app/middleware/` | request-id, logs redactados, recover, cabeceras de seguridad, CORS, limpieza de cabeceras |
-| `app/auth/` | JWT (Firebase/OIDC, JWKS en caché), API keys (SHA-256) y allowlist de emails (`allowlist.go`) |
+| `app/auth/` | JWT (Firebase/OIDC, JWKS en caché), API keys (SHA-256), allowlist de emails (`allowlist.go`) y tokens `tka_` (`tekitla_token.go`: caché y `TokenOrJWT`) |
+| `app/upstream/tokenauth.go` | Cliente de `ResolveToken` (`auth.TokenResolver`), llamada interna por la conexión de `issues` |
 | `app/routes/`, `app/ratelimit/`, `app/config/` | routes.yaml, token bucket en memoria, variables de entorno |
 
 Pipeline (en orden): request-id → access log → recover → cabeceras → CORS →
-borrar `X-User-Id`/`X-Roles`/`Grpc-*` del cliente → mux → ruta declarada (404)
+borrar `X-User-Id`/`X-Agent-Id`/`X-Roles`/`Grpc-*` del cliente → mux → ruta declarada (404)
 → body (413) → auth (401/503) → roles/allowlist (403) → rate limit (429) →
 Content-Type (415) → deadline gRPC → interceptor (metadata desde cero).
 Detalle: `docs/rutas.md`; auth: `docs/auth.md`.
@@ -44,7 +51,9 @@ Detalle: `docs/rutas.md`; auth: `docs/auth.md`.
    `docker-compose.yml` y `docker-compose.coolify.yml`.
 3. **routes.yaml**: `<paquete>.<Servicio>/<Método>` con `public: true`,
    `roles: [...]` o `deny: true` (+ `rate_limit` estricto en login, registro,
-   recuperar clave, búsquedas). En Tekitla (rebanada 1): `roles: [allowlist]`.
+   recuperar clave, búsquedas). En Tekitla: `roles: [allowlist, issues:read]`
+   (lecturas) o `[allowlist, issues:write]` (escrituras); agentes y tokens,
+   solo `[allowlist]`.
 4. `go test ./...`: `TestAutorizacionPorRuta` genera los casos solo
    (401/403/200; pública → 200; deny → 404; con `allowlist`, además 403 por
    email ajeno, sin verificar o rol puesto como claim). Si falla por "sin
@@ -53,7 +62,7 @@ Detalle: `docs/rutas.md`; auth: `docs/auth.md`.
 
 ## Repo de protos
 
-`github.com/tekitla/tekitla-protos` (hoy `v0.4.0`): el handler sale de
+`github.com/tekitla/tekitla-protos` (hoy `v0.5.0`): el handler sale de
 `<módulo>/gen/go/issues/v1` (`app/upstream/registry.go`) y el OpenAPI de
 `<módulo>/gen/openapi` (`cli/main.go`). Ya no hay `proto/`, `gen/` ni `buf.*`
 locales. Versión nueva: `go get github.com/tekitla/tekitla-protos@<tag>`. Sin
@@ -66,7 +75,7 @@ tag (co-desarrollo): `go mod edit -replace` o `make workspace`.
 2. Algoritmos JWT en lista cerrada (RS256/ES256). Validar siempre iss, aud,
    exp, nbf; tolerancia ≤ 60 s. Nunca `none` ni HS*.
 3. Los servicios reciben identidad **solo** por la metadata que arma el
-   interceptor (`x-user-id`, `x-roles`, `x-request-id`). Nunca reenviar
+   interceptor (`x-user-id`, `x-agent-id`, `x-roles`, `x-request-id`). Nunca reenviar
    cabeceras del cliente (ni `Authorization`) ni metadata de vuelta.
 4. Errores 5xx: mensaje genérico + `request_id`. Nunca devolver `err.Error()`
    de un upstream ni stack traces.
