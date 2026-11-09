@@ -10,6 +10,9 @@
 //   - None: sin auth (todas las rutas tienen que ser públicas).
 //   - EmailAllowlist: envuelve a otro y otorga el rol AllowlistRole solo a
 //     los emails verificados de una lista (Tekitla, rebanada 1).
+//   - TekitlaTokens: `Authorization: Bearer tka_…`, resueltos con
+//     tekitla-issues y guardados en caché 60 s (issue 025, ADR 0009);
+//     TokenOrJWT elige entre él y Firebase según el bearer.
 //
 // Cuál se usa lo decide la respuesta `auth` de la plantilla (cli/main.go).
 package auth
@@ -33,13 +36,17 @@ var (
 
 // Identity es quién hace el request, ya verificado.
 type Identity struct {
-	Subject string   // sub del token, o "apikey:<id>"
-	Roles   []string // roles del token o scopes de la API key
-	Kind    string   // "jwt" | "apikey"
+	Subject string   // sub del token, "apikey:<id>", o el uid de la persona dueña de un token tka_
+	Roles   []string // roles del token o scopes de la API key / del token tka_
+	Kind    string   // "jwt" | "apikey" | "token"
 	// Email y EmailVerified: claims `email` y `email_verified` del token (solo
 	// JWT). Los usa EmailAllowlist; NUNCA viajan a los servicios ni a los logs.
 	Email         string
 	EmailVerified bool
+	// AgentID: id del agente si la credencial es un token de agente (va en
+	// x-agent-id). TokenID: id del token tka_, solo para la auditoría.
+	AgentID string
+	TokenID string
 }
 
 // HasAnyRole: alcanza con uno de los requeridos.

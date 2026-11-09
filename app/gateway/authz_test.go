@@ -101,10 +101,12 @@ func TestRutasDeLaTablaExisten(t *testing.T) {
 	}
 }
 
-// TestRutasDeTekitlaExigenAllowlist (rebanadas 1 y 3a, issues 011 y 013): las 20 rutas del
-// contrato están expuestas, ninguna es pública ni se abre sin el rol de la
-// allowlist, y las escrituras tienen un rate limit más estricto que las
-// lecturas.
+// TestRutasDeTekitlaExigenAllowlist (rebanadas 1 y 3a, issues 011, 013 y
+// 025): las rutas del contrato están expuestas, ninguna es pública ni se abre
+// sin el rol de la allowlist; las de IssueService aceptan además el scope de
+// token que corresponde (lecturas issues:read, escrituras issues:write) y las
+// de ActorService solo la allowlist. ImportIssue no se expone. Las
+// escrituras tienen un rate limit más estricto que las lecturas.
 func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 	e := newEnv(t, nil)
 	want := []string{
@@ -120,13 +122,29 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		"POST /v1/projects/{project_id}/statuses:batchUpdate",
 		"GET /v1/projects/{project_id}/labels", "POST /v1/projects/{project_id}/labels",
 		"PATCH /v1/projects/{project_id}/labels/{label_id}", "DELETE /v1/projects/{project_id}/labels/{label_id}",
+		// Issue 025: agentes y tokens.
+		"GET /v1/actors", "POST /v1/agents", "POST /v1/actors/{actor_id}:revoke",
+		"GET /v1/tokens", "POST /v1/tokens", "POST /v1/tokens/{token_id}:revoke",
 	}
-	var got []string
+	denied := []string{"issues.v1.IssueService/ImportIssue"}
+	var got, gotDenied []string
 	for _, b := range e.report.Bindings {
-		got = append(got, b.Verb+" "+b.Template)
 		pol := e.table.Policy(b.Method)
-		if pol == nil || pol.Public || pol.Deny || !slices.Equal(pol.Roles, []string{auth.AllowlistRole}) {
-			t.Errorf("%s: política %+v, esperaba roles: [%s]", b.Method, pol, auth.AllowlistRole)
+		if pol != nil && pol.Deny {
+			gotDenied = append(gotDenied, b.Method)
+			continue
+		}
+		got = append(got, b.Verb+" "+b.Template)
+		wantRoles := []string{auth.AllowlistRole}
+		switch {
+		case strings.HasPrefix(b.Method, "issues.v1.ActorService/"):
+		case b.Verb == http.MethodGet:
+			wantRoles = append(wantRoles, auth.ScopeIssuesRead)
+		default:
+			wantRoles = append(wantRoles, auth.ScopeIssuesWrite)
+		}
+		if pol == nil || pol.Public || !slices.Equal(pol.Roles, wantRoles) {
+			t.Errorf("%s: política %+v, esperaba roles: %v", b.Method, pol, wantRoles)
 			continue
 		}
 		// Escrituras: bucket propio y más estricto que el de las lecturas.
@@ -138,5 +156,8 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 	slices.Sort(want)
 	if !slices.Equal(got, want) {
 		t.Fatalf("rutas expuestas = %v, esperaba %v", got, want)
+	}
+	if !slices.Equal(gotDenied, denied) {
+		t.Fatalf("rutas cerradas = %v, esperaba %v", gotDenied, denied)
 	}
 }

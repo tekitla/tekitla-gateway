@@ -37,6 +37,14 @@ version: 1
 # `allowlist`, que el gateway NO lee del token: lo otorga solo a quien tiene el
 # email verificado en AUTH_ALLOWED_EMAILS (app/auth/allowlist.go; docs/auth.md).
 # Nada es público salvo /healthz y /readyz (fuera del mux).
+#
+# Issue 025 (ADR 0009): las rutas de IssueService aceptan también un token de
+# Tekitla (`Authorization: Bearer tka_…`, app/auth/tekitla_token.go) con el
+# scope que corresponde: lecturas `issues:read`, escrituras `issues:write`
+# (write no implica read). Esos roles solo los da un token tka_: si un ID token
+# de Firebase los trae como claim, se descartan. Las rutas de ActorService
+# (agentes y tokens) piden solo `allowlist`: un token nunca crea agentes ni
+# otros tokens.
 
 defaults:
   timeout: 10s
@@ -49,33 +57,33 @@ defaults:
 routes:
   # --- Lecturas --------------------------------------------------------------
   issues.v1.IssueService/ListProjects:
-    roles: [allowlist]
+    roles: [allowlist, issues:read]
 
   # Issue 012: ListIssues también busca (query, filtros): bucket propio, más
   # estricto que el global pero holgado para el tablero y la búsqueda mientras
   # se escribe (el panel la demora).
   issues.v1.IssueService/ListIssues:
-    roles: [allowlist]
+    roles: [allowlist, issues:read]
     rate_limit:
       per_minute: 300
       burst: 60
 
   issues.v1.IssueService/GetIssue:
-    roles: [allowlist]
+    roles: [allowlist, issues:read]
 
   # Rebanada 3a: estados, etiquetas e historial.
   issues.v1.IssueService/ListStatuses:
-    roles: [allowlist]
+    roles: [allowlist, issues:read]
 
   issues.v1.IssueService/ListLabels:
-    roles: [allowlist]
+    roles: [allowlist, issues:read]
 
   issues.v1.IssueService/ListIssueEvents:
-    roles: [allowlist]
+    roles: [allowlist, issues:read]
 
   # --- Escrituras (POST): body chico, timeout corto y bucket propio ----------
   issues.v1.IssueService/CreateProject:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 65536
     rate_limit:
@@ -83,7 +91,7 @@ routes:
       burst: 10
 
   issues.v1.IssueService/CreateIssue:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 65536
     rate_limit:
@@ -91,7 +99,7 @@ routes:
       burst: 20
 
   issues.v1.IssueService/MoveIssue:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 65536
     rate_limit:
@@ -99,7 +107,7 @@ routes:
       burst: 30
   # Issue 011: descartar (con motivo) y restaurar.
   issues.v1.IssueService/DiscardIssue:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 65536
     rate_limit:
@@ -107,7 +115,7 @@ routes:
       burst: 20
   # Sin campos en el body (todo va en el path): {} o vacío.
   issues.v1.IssueService/RestoreIssue:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 1024
     rate_limit:
@@ -117,7 +125,7 @@ routes:
   # Rebanada 3a. UpdateIssue acepta la descripción completa (20 000
   # caracteres): body de hasta 128 KiB.
   issues.v1.IssueService/UpdateIssue:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 131072
     rate_limit:
@@ -125,7 +133,7 @@ routes:
       burst: 30
 
   issues.v1.IssueService/CreateComment:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 65536
     rate_limit:
@@ -134,7 +142,7 @@ routes:
 
   # Configuración del proyecto (estados y etiquetas): cambia poco.
   issues.v1.IssueService/CreateStatus:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 65536
     rate_limit:
@@ -142,7 +150,7 @@ routes:
       burst: 10
 
   issues.v1.IssueService/UpdateStatus:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 65536
     rate_limit:
@@ -150,7 +158,7 @@ routes:
       burst: 10
 
   issues.v1.IssueService/DeleteStatus:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 10s
     max_body_bytes: 65536
     rate_limit:
@@ -160,7 +168,7 @@ routes:
   # estados en el resultado y lo valida todo en una transacción (puede mover
   # issues de los borrados, como DeleteStatus); acá el único tope es el body.
   issues.v1.IssueService/BatchUpdateStatuses:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 10s
     max_body_bytes: 65536
     rate_limit:
@@ -168,7 +176,7 @@ routes:
       burst: 10
 
   issues.v1.IssueService/CreateLabel:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 65536
     rate_limit:
@@ -176,7 +184,7 @@ routes:
       burst: 10
 
   issues.v1.IssueService/UpdateLabel:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 65536
     rate_limit:
@@ -184,9 +192,54 @@ routes:
       burst: 10
 
   issues.v1.IssueService/DeleteLabel:
-    roles: [allowlist]
+    roles: [allowlist, issues:write]
     timeout: 5s
     max_body_bytes: 65536
+    rate_limit:
+      per_minute: 30
+      burst: 10
+
+  # --- Issue 025: importación (solo administración, no se expone) ------------
+  # La usa tools/import-round de tekitla-issues directo por gRPC.
+  issues.v1.IssueService/ImportIssue:
+    deny: true
+
+  # --- Issue 025: agentes y tokens de la persona (solo sesión de Firebase) ---
+  issues.v1.ActorService/ListActors:
+    roles: [allowlist]
+
+  issues.v1.ActorService/ListTokens:
+    roles: [allowlist]
+
+  issues.v1.ActorService/CreateAgent:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 4096
+    rate_limit:
+      per_minute: 10
+      burst: 5
+
+  issues.v1.ActorService/RevokeActor:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 1024
+    rate_limit:
+      per_minute: 10
+      burst: 5
+
+  # Emitir tokens: el más estricto (cada uno es una credencial nueva).
+  issues.v1.ActorService/CreateToken:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 4096
+    rate_limit:
+      per_minute: 10
+      burst: 5
+
+  issues.v1.ActorService/RevokeToken:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 1024
     rate_limit:
       per_minute: 30
       burst: 10

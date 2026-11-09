@@ -27,7 +27,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 // IdentityHeaders son las cabeceras/metadata con las que el gateway informa la
 // identidad a los servicios. Si vienen del cliente se BORRAN: solo las pone el
 // gateway, después de verificar credenciales.
-var IdentityHeaders = []string{"X-User-Id", "X-Roles", "X-Auth-Type", "X-Client-Ip"}
+var IdentityHeaders = []string{"X-User-Id", "X-Agent-Id", "X-Roles", "X-Auth-Type", "X-Client-Ip"}
 
 // StripSpoofable borra del request lo que un cliente no puede decidir:
 // las cabeceras de identidad, cualquier Grpc-* (grpc-gateway convierte

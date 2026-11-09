@@ -17,6 +17,7 @@ import (
 	"github.com/tekitla/tekitla-gateway/app/gateway"
 	"github.com/tekitla/tekitla-gateway/app/middleware"
 	"github.com/tekitla/tekitla-gateway/app/ratelimit"
+	"github.com/tekitla/tekitla-gateway/app/reqctx"
 	"github.com/tekitla/tekitla-gateway/app/routes"
 	"github.com/tekitla/tekitla-gateway/app/telemetry"
 	"github.com/tekitla/tekitla-gateway/app/upstream"
@@ -87,6 +88,24 @@ func run() error {
 		ups = append(ups, gateway.Upstream{Service: svc, Conn: u.Conn})
 	}
 
+	// 4b. Tokens de Tekitla (`tka_`, issue 025): los resuelve tekitla-issues
+	//     por la misma conexión; el resto de los bearer va a Firebase.
+	issuesConn, ok := conns["issues"]
+	if !ok {
+		return errors.New("tokens tka_: falta el upstream issues en app/upstream/registry.go")
+	}
+	// Consultas por tokens sin caché: 30/min por IP (la auth corre antes del
+	// rate limit de la ruta, ver auth.MissLimiter).
+	missRate := ratelimit.Rate{PerMinute: 30, Burst: 10}
+	tokens := auth.NewTekitlaTokens(upstream.NewTokenAuth(issuesConn.Conn)).WithMissLimiter(func(r *http.Request) bool {
+		ip := r.RemoteAddr
+		if info := reqctx.From(r.Context()); info != nil && info.ClientIP != "" {
+			ip = info.ClientIP
+		}
+		return limiter.Allow("tka-miss|ip:"+ip, missRate).Allowed
+	})
+	authn = auth.TokenOrJWT{Tokens: tokens, JWT: authn}
+
 	// 5. Handler.
 	var spec []byte
 	if cfg.OpenAPIEnabled {
@@ -125,7 +144,7 @@ func run() error {
 	go func() {
 		log.Info("gateway escuchando",
 			slog.String("addr", srv.Addr),
-			slog.String("auth", "firebase"),
+			slog.String("auth", "firebase+tka"),
 			slog.Int("rutas_declaradas", len(table.Methods())),
 			slog.Int("rutas_http", len(report.Bindings)),
 			slog.Bool("openapi", cfg.OpenAPIEnabled),
