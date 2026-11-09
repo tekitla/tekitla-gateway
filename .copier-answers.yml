@@ -7,7 +7,7 @@ deploy_target: coolify
 docs_repo: ''
 dueño: '@vrojas1015'
 firebase_project: tekitla-app
-go_version: 1.26.9
+go_version: 1.26.10
 http_port: 8080
 module_path: github.com/tekitla/tekitla-gateway
 protos_module: github.com/tekitla/tekitla-protos

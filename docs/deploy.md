@@ -70,6 +70,21 @@ Settings > Secrets and variables > Actions: variables `COOLIFY_URL`,
 reviewers).
 Secret `PROTOS_TOKEN` (lectura del repo de protos).
 
+La CI pide el deploy con **`POST /api/v1/deploy?uuid=<recurso>&force=false`**:
+desde Coolify 4.6 ese endpoint solo acepta `POST` (un `GET` responde
+`405 Method Not Allowed`, `This endpoint has changed to a POST request.`). El
+token necesita el permiso `deploy`. Si la respuesta no es 2xx, el job falla
+con el código HTTP y el mensaje de Coolify.
+
+Probar el token sin desplegar (`GET /api/v1/version` solo necesita `read`):
+
+```bash
+curl -fsS "$COOLIFY_URL/api/v1/version" -H "Authorization: Bearer $COOLIFY_TOKEN"
+```
+
+> Un `POST /api/v1/deploy` con un UUID válido **despliega**: no lo uses para
+> probar el token.
+
 ## 5. Verificar
 
 ```bash
