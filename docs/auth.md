@@ -83,16 +83,26 @@ piden los clientes MCP).
   como máximo** y nunca más allá de su vencimiento. Es la demora de una
   revocación. Los rechazos también se guardan 60 s (un token inexistente no
   puede pasar a existir), así un intento repetido no consulta al servicio.
-  Hasta 10 000 entradas.
-- **Errores:** `UNAUTHENTICATED` del servicio → `401`; servicio caído o
-  cualquier otra falla → `503` (no se guarda: el próximo request reintenta).
+  Válidos y rechazados van en cachés separadas de hasta 10 000 entradas cada
+  una (una lluvia de tokens falsos no desaloja a los buenos), y varios
+  requests con el mismo token sin caché hacen una sola consulta.
+- **Tokens desconocidos:** la autenticación corre antes del rate limit de la
+  ruta, así que las consultas por tokens que no están en caché tienen su
+  propio límite: 30/min por IP (ráfaga 10). Pasado, `401` sin consultar.
+- **Errores:** `UNAUTHENTICATED` con el `ErrorInfo` de `tekitla-issues`
+  (domain `issues-service`) → `401`; servicio caído, un `UNAUTHENTICATED`
+  de otra capa (proxy, auth del upstream) o cualquier otra falla → `503`
+  (no se guarda: el próximo request reintenta). Una resolución ya vencida se
+  rechaza.
 - **Identidad:** `x-user-id` = la persona dueña, `x-agent-id` = el agente
   (si es de un agente), `x-roles` = los scopes (`issues:read`,
   `issues:write`) y `x-auth-type: token`. Un token nunca recibe `allowlist`.
 - **Los scopes solo salen de un token:** si un ID token de Firebase trae
   `issues:read` o `issues:write` como custom claim, se descartan.
-- **Rate limit:** con un token de agente el bucket es del agente
-  (`agent:<id>`), no de su dueño.
+- **Rate limit:** con un token (de persona o de agente) el bucket es el de
+  la persona dueña (`sub:<uid>`): crear agentes no multiplica la cuota.
+- **Request id:** `ResolveToken` va sin identidad pero con `x-request-id`,
+  para cruzar el log del servicio con el del gateway.
 - **Auditoría:** el access log de cada request con token lleva `user_id`,
   `agent_id`, `token_id`, `auth`, `route` y `status`. Nunca el token ni su
   hash.
@@ -107,7 +117,7 @@ piden los clientes MCP).
 | API1 Autorización por objeto | La sigue haciendo `tekitla-issues` con `x-user-id` (= la persona, también con un token de agente): un proyecto, actor o token ajeno es `NOT_FOUND`. |
 | API2 Autenticación rota | Tokens de 256 bits aleatorios guardados como SHA-256, vencimiento obligatorio (≤ 90 días), revocación en cascada, sin el token en logs ni respuestas; formato validado antes de consultar; `401` sin detalle. |
 | API3 Autorización por propiedad | Las respuestas de tokens nunca traen el secreto ni el hash (solo `CreateToken` devuelve el secreto, una vez). `x-agent-id` lo pone solo el gateway. |
-| API4 Consumo de recursos | Caché positiva y negativa de 60 s (acotada), timeout de 3 s a `ResolveToken`, rate limit por agente y buckets estrictos en `CreateToken`/`CreateAgent` (10/min). |
+| API4 Consumo de recursos | Caché positiva y negativa de 60 s (acotadas y separadas), una consulta por token a la vez, 30 consultas/min por IP para tokens desconocidos, timeout de 3 s a `ResolveToken`, rate limit por persona (no por agente) y buckets estrictos en `CreateToken`/`CreateAgent` (10/min). |
 | API5 Autorización por función | `routes.yaml`: lecturas con `issues:read`, escrituras con `issues:write` (write no implica read); agentes y tokens solo con `allowlist` (un token no crea agentes ni tokens; el servicio también lo rechaza). `ImportIssue` con `deny: true`. |
 | API6 Flujos de negocio sensibles | Emitir tokens pide sesión de Firebase de la persona; rate limit propio. |
 | API7 SSRF | No aplica: el gateway no hace requests a URLs del cliente. |

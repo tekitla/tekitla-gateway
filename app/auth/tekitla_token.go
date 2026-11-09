@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 // Tokens de Tekitla (issue 025, ADR 0009): `Authorization: Bearer tka_…`,
@@ -37,8 +39,8 @@ var TokenScopes = []string{ScopeIssuesRead, ScopeIssuesWrite}
 // revocación (ADR 0009).
 const TokenCacheTTL = 60 * time.Second
 
-// tokenCacheMax acota la memoria de la caché (incluye los tokens inválidos,
-// que también se guardan para no consultar al servicio con cada intento).
+// tokenCacheMax acota la memoria de cada caché (válidos e inválidos van en
+// mapas separados: una lluvia de tokens falsos no desaloja a los buenos).
 const tokenCacheMax = 10000
 
 // TokenResolution es la identidad de un token válido.
@@ -61,13 +63,22 @@ type TokenResolver interface {
 	ResolveToken(ctx context.Context, token string) (*TokenResolution, error)
 }
 
+// MissLimiter decide si un request puede consultar a tekitla-issues por un
+// token que no está en caché (devuelve false si no). La autenticación corre
+// antes del rate limit de la ruta: sin esto, tokens inventados harían una
+// consulta a la base por request.
+type MissLimiter func(r *http.Request) bool
+
 // TekitlaTokens es el Authenticator de los tokens `tka_`.
 type TekitlaTokens struct {
 	resolver TokenResolver
 	now      func() time.Time
+	allow    MissLimiter
 
-	mu    sync.Mutex
-	cache map[[sha256.Size]byte]tokenCacheEntry
+	mu       sync.Mutex
+	valid    map[[sha256.Size]byte]tokenCacheEntry
+	rejected map[[sha256.Size]byte]tokenCacheEntry
+	group    singleflight.Group
 }
 
 type tokenCacheEntry struct {
@@ -77,7 +88,16 @@ type tokenCacheEntry struct {
 
 // NewTekitlaTokens construye el autenticador.
 func NewTekitlaTokens(resolver TokenResolver) *TekitlaTokens {
-	return &TekitlaTokens{resolver: resolver, now: time.Now, cache: map[[sha256.Size]byte]tokenCacheEntry{}}
+	return &TekitlaTokens{
+		resolver: resolver, now: time.Now,
+		valid: map[[sha256.Size]byte]tokenCacheEntry{}, rejected: map[[sha256.Size]byte]tokenCacheEntry{},
+	}
+}
+
+// WithMissLimiter acota las consultas por tokens que no están en caché.
+func (t *TekitlaTokens) WithMissLimiter(allow MissLimiter) *TekitlaTokens {
+	t.allow = allow
+	return t
 }
 
 // WithClock reemplaza el reloj (tests).
@@ -105,58 +125,72 @@ func (t *TekitlaTokens) Authenticate(r *http.Request) (*Identity, error) {
 	key := sha256.Sum256([]byte(tok))
 	now := t.now()
 	if e, ok := t.lookup(key, now); ok {
-		return identityFrom(e.res)
+		return identityFrom(e.res, now)
 	}
-	res, err := t.resolver.ResolveToken(r.Context(), tok)
-	switch {
-	case errors.Is(err, ErrInvalidCredentials):
-		t.store(key, tokenCacheEntry{until: now.Add(TokenCacheTTL)}, now)
+	if t.allow != nil && !t.allow(r) {
+		return nil, fmt.Errorf("%w: demasiados tokens desconocidos desde este cliente", ErrInvalidCredentials)
+	}
+	// Varios requests con el mismo token sin caché hacen una sola consulta.
+	v, err, _ := t.group.Do(string(key[:]), func() (any, error) {
+		res, err := t.resolver.ResolveToken(context.WithoutCancel(r.Context()), tok)
+		switch {
+		case errors.Is(err, ErrInvalidCredentials):
+			t.store(t.rejected, key, tokenCacheEntry{until: now.Add(TokenCacheTTL)}, now)
+			return nil, err
+		case err != nil:
+			// No se guarda: el próximo request vuelve a intentar.
+			return nil, err
+		}
+		until := now.Add(TokenCacheTTL)
+		if !res.ExpiresAt.IsZero() && res.ExpiresAt.Before(until) {
+			until = res.ExpiresAt
+		}
+		t.store(t.valid, key, tokenCacheEntry{res: res, until: until}, now)
+		return res, nil
+	})
+	if err != nil {
 		return nil, err
-	case err != nil:
-		// No se guarda: el próximo request vuelve a intentar.
-		return nil, err
 	}
-	until := now.Add(TokenCacheTTL)
-	if !res.ExpiresAt.IsZero() && res.ExpiresAt.Before(until) {
-		until = res.ExpiresAt
-	}
-	t.store(key, tokenCacheEntry{res: res, until: until}, now)
-	return identityFrom(res)
+	return identityFrom(v.(*TokenResolution), now)
 }
 
 func (t *TekitlaTokens) lookup(key [sha256.Size]byte, now time.Time) (tokenCacheEntry, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	e, ok := t.cache[key]
-	if !ok || !now.Before(e.until) {
-		return tokenCacheEntry{}, false
+	for _, cache := range []map[[sha256.Size]byte]tokenCacheEntry{t.valid, t.rejected} {
+		if e, ok := cache[key]; ok && now.Before(e.until) {
+			return e, true
+		}
 	}
-	return e, true
+	return tokenCacheEntry{}, false
 }
 
-func (t *TekitlaTokens) store(key [sha256.Size]byte, e tokenCacheEntry, now time.Time) {
+func (t *TekitlaTokens) store(cache map[[sha256.Size]byte]tokenCacheEntry, key [sha256.Size]byte, e tokenCacheEntry, now time.Time) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if len(t.cache) >= tokenCacheMax {
-		for k, old := range t.cache {
+	if len(cache) >= tokenCacheMax {
+		for k, old := range cache {
 			if !now.Before(old.until) {
-				delete(t.cache, k)
+				delete(cache, k)
 			}
 		}
-		if len(t.cache) >= tokenCacheMax {
+		if len(cache) >= tokenCacheMax {
 			// Muchos tokens distintos en menos de 60 s: se empieza de cero
-			// antes que crecer sin límite.
-			clear(t.cache)
+			// antes que crecer sin límite (solo esta caché).
+			clear(cache)
 		}
 	}
-	t.cache[key] = e
+	cache[key] = e
 }
 
 // identityFrom arma la identidad de un token. Los roles son solo sus scopes
 // conocidos: un token nunca trae `allowlist` ni otro rol.
-func identityFrom(res *TokenResolution) (*Identity, error) {
+func identityFrom(res *TokenResolution, now time.Time) (*Identity, error) {
 	if res == nil {
 		return nil, fmt.Errorf("%w: token de Tekitla inválido", ErrInvalidCredentials)
+	}
+	if !res.ExpiresAt.IsZero() && !now.Before(res.ExpiresAt) {
+		return nil, fmt.Errorf("%w: token de Tekitla vencido", ErrInvalidCredentials)
 	}
 	if res.UserID == "" {
 		return nil, fmt.Errorf("%w: token sin persona responsable", ErrInvalidCredentials)

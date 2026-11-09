@@ -3,6 +3,7 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -147,5 +148,91 @@ func TestTokenOrJWT(t *testing.T) {
 	}
 	if !slices.Equal(jwt.id.Roles, []string{"allowlist", "issues:read", "issues:write", "otro"}) {
 		t.Errorf("no tiene que mutar la identidad original")
+	}
+}
+
+// Una resolución ya vencida (relojes desfasados) no autentica.
+func TestTekitlaTokensResolucionVencida(t *testing.T) {
+	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
+	res := &countingResolver{res: &auth.TokenResolution{UserID: "u1", Scopes: []string{"issues:read"}, ExpiresAt: now.Add(-5 * time.Second)}}
+	a := auth.NewTekitlaTokens(res).WithClock(func() time.Time { return now })
+	if _, err := authenticate(t, a, validTok); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Fatalf("vencida: %v", err)
+	}
+}
+
+// Las consultas por tokens sin caché tienen su propio límite; los que ya
+// están en caché no lo gastan.
+func TestTekitlaTokensMissLimiter(t *testing.T) {
+	res := &countingResolver{res: &auth.TokenResolution{UserID: "u1", Scopes: []string{"issues:read"}, ExpiresAt: time.Now().Add(time.Hour)}}
+	budget := 1
+	a := auth.NewTekitlaTokens(res).WithMissLimiter(func(*http.Request) bool {
+		budget--
+		return budget >= 0
+	})
+	if _, err := authenticate(t, a, validTok); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authenticate(t, a, validTok); err != nil {
+		t.Errorf("en caché no gasta el límite: %v", err)
+	}
+	other := auth.TokenPrefix + strings.Repeat("Z", 43)
+	if _, err := authenticate(t, a, other); !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Errorf("sin presupuesto: %v", err)
+	}
+	if res.calls != 1 {
+		t.Errorf("consultas: %d, esperaba 1", res.calls)
+	}
+}
+
+// Los tokens rechazados no desalojan a los válidos.
+func TestTekitlaTokensRechazosNoDesalojan(t *testing.T) {
+	good := &auth.TokenResolution{UserID: "u1", Scopes: []string{"issues:read"}, ExpiresAt: time.Now().Add(time.Hour)}
+	res := &countingResolver{res: good}
+	a := auth.NewTekitlaTokens(res)
+	authenticate(t, a, validTok)
+	res.res, res.err = nil, auth.ErrInvalidCredentials
+	for i := range 10001 {
+		authenticate(t, a, auth.TokenPrefix+fmt.Sprintf("%043d", i))
+	}
+	before := res.calls
+	res.res, res.err = good, nil
+	if _, err := authenticate(t, a, validTok); err != nil || res.calls != before {
+		t.Errorf("el válido tenía que seguir en caché: %v (%d consultas nuevas)", err, res.calls-before)
+	}
+}
+
+// slowResolver tarda en responder, para juntar requests concurrentes.
+type slowResolver struct {
+	countingResolver
+	gate chan struct{}
+}
+
+func (s *slowResolver) ResolveToken(ctx context.Context, tok string) (*auth.TokenResolution, error) {
+	<-s.gate
+	return s.countingResolver.ResolveToken(ctx, tok)
+}
+
+// Varios requests con el mismo token sin caché hacen una sola consulta.
+func TestTekitlaTokensUnaConsultaPorToken(t *testing.T) {
+	res := &slowResolver{countingResolver: countingResolver{res: &auth.TokenResolution{UserID: "u1", Scopes: []string{"issues:read"}, ExpiresAt: time.Now().Add(time.Hour)}}, gate: make(chan struct{})}
+	a := auth.NewTekitlaTokens(res)
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := httptest.NewRequest("GET", "/v1/projects", nil)
+			r.Header.Set("Authorization", "Bearer "+validTok)
+			if _, err := a.Authenticate(r); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(res.gate)
+	wg.Wait()
+	if res.calls != 1 {
+		t.Errorf("consultas: %d, esperaba 1", res.calls)
 	}
 }

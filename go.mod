@@ -8,6 +8,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/tekitla/tekitla-protos v0.5.0
 	go.yaml.in/yaml/v3 v3.0.5
+	golang.org/x/sync v0.25.0
 	google.golang.org/api v0.295.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260921155816-b14227669459
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260918162117-cecb64721679

@@ -17,6 +17,7 @@ import (
 	"github.com/tekitla/tekitla-gateway/app/gateway"
 	"github.com/tekitla/tekitla-gateway/app/middleware"
 	"github.com/tekitla/tekitla-gateway/app/ratelimit"
+	"github.com/tekitla/tekitla-gateway/app/reqctx"
 	"github.com/tekitla/tekitla-gateway/app/routes"
 	"github.com/tekitla/tekitla-gateway/app/telemetry"
 	"github.com/tekitla/tekitla-gateway/app/upstream"
@@ -93,7 +94,17 @@ func run() error {
 	if !ok {
 		return errors.New("tokens tka_: falta el upstream issues en app/upstream/registry.go")
 	}
-	authn = auth.TokenOrJWT{Tokens: auth.NewTekitlaTokens(upstream.NewTokenAuth(issuesConn.Conn)), JWT: authn}
+	// Consultas por tokens sin caché: 30/min por IP (la auth corre antes del
+	// rate limit de la ruta, ver auth.MissLimiter).
+	missRate := ratelimit.Rate{PerMinute: 30, Burst: 10}
+	tokens := auth.NewTekitlaTokens(upstream.NewTokenAuth(issuesConn.Conn)).WithMissLimiter(func(r *http.Request) bool {
+		ip := r.RemoteAddr
+		if info := reqctx.From(r.Context()); info != nil && info.ClientIP != "" {
+			ip = info.ClientIP
+		}
+		return limiter.Allow("tka-miss|ip:"+ip, missRate).Allowed
+	})
+	authn = auth.TokenOrJWT{Tokens: tokens, JWT: authn}
 
 	// 5. Handler.
 	var spec []byte

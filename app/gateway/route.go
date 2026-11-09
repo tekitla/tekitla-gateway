@@ -93,11 +93,9 @@ func (g *gw) routeMiddleware(next runtime.HandlerFunc) runtime.HandlerFunc {
 		//    con rate_limit propio tienen su bucket; el resto comparte uno.
 		key := "ip:" + info.ClientIP
 		if info.Identity != nil {
+			// También con un token de agente: el bucket es de la persona, así
+			// crear más agentes no multiplica su cuota.
 			key = "sub:" + info.Identity.Subject
-			if info.Identity.AgentID != "" {
-				// Cada agente tiene su bucket: no gasta el de su dueño.
-				key = "agent:" + info.Identity.AgentID
-			}
 		}
 		bucket := "*"
 		if pol.OwnRateLimit {

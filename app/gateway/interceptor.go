@@ -53,7 +53,13 @@ func streamInterceptor(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.Clie
 // sale).
 func outgoing(ctx context.Context, method string) (context.Context, error) {
 	if reqctx.IsInternal(ctx) {
-		return metadata.NewOutgoingContext(ctx, metadata.MD{}), nil
+		// Llamada del propio gateway: sin identidad, pero con el request id
+		// (si hay request) para cruzar los logs con el servicio.
+		md := metadata.MD{}
+		if id := reqctx.RequestID(ctx); id != "" {
+			md.Set(MDRequestID, id)
+		}
+		return metadata.NewOutgoingContext(ctx, md), nil
 	}
 	info := reqctx.From(ctx)
 	if info == nil || info.Method == "" || "/"+info.Method != method {

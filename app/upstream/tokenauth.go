@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,6 +27,11 @@ type TokenAuth struct {
 
 var _ auth.TokenResolver = (*TokenAuth)(nil)
 
+// issuesErrorDomain es el Domain del google.rpc.ErrorInfo que adjunta
+// tekitla-issues: un UNAUTHENTICATED sin él no lo dijo el servicio (un proxy,
+// la auth de Cloud Run) y no prueba que el token sea inválido.
+const issuesErrorDomain = "issues-service"
+
 // tokenAuthTimeout acota la espera: con el servicio colgado, el request
 // responde 503 en vez de esperar el timeout de la ruta.
 const tokenAuthTimeout = 3 * time.Second
@@ -35,14 +41,15 @@ func NewTokenAuth(conn grpc.ClientConnInterface) *TokenAuth {
 	return &TokenAuth{client: issuesv1.NewTokenAuthServiceClient(conn), timeout: tokenAuthTimeout}
 }
 
-// ResolveToken implementa auth.TokenResolver: UNAUTHENTICATED -> token
-// inválido (401); cualquier otra falla -> no disponible (503), nunca 401.
+// ResolveToken implementa auth.TokenResolver: UNAUTHENTICATED de
+// tekitla-issues -> token inválido (401); cualquier otra falla -> no
+// disponible (503), nunca 401.
 func (t *TokenAuth) ResolveToken(ctx context.Context, token string) (*auth.TokenResolution, error) {
 	ctx, cancel := context.WithTimeout(reqctx.Internal(ctx), t.timeout)
 	defer cancel()
 	res, err := t.client.ResolveToken(ctx, &issuesv1.ResolveTokenRequest{Token: token})
 	if err != nil {
-		if status.Code(err) == codes.Unauthenticated {
+		if st := status.Convert(err); st.Code() == codes.Unauthenticated && fromIssues(st) {
 			return nil, fmt.Errorf("%w: token de Tekitla rechazado", auth.ErrInvalidCredentials)
 		}
 		// El detalle va al log del gateway (sin el token); al cliente, 503.
@@ -56,6 +63,9 @@ func (t *TokenAuth) ResolveToken(ctx context.Context, token string) (*auth.Token
 	if res.GetExpiresAt() != nil {
 		out.ExpiresAt = res.GetExpiresAt().AsTime()
 	}
+	if out.UserID == "" {
+		return nil, fmt.Errorf("%w: ResolveToken sin persona", auth.ErrUnavailable)
+	}
 	for _, s := range res.GetScopes() {
 		switch s {
 		case issuesv1.TokenScope_TOKEN_SCOPE_ISSUES_READ:
@@ -65,4 +75,14 @@ func (t *TokenAuth) ResolveToken(ctx context.Context, token string) (*auth.Token
 		}
 	}
 	return out, nil
+}
+
+// fromIssues informa si el status trae el ErrorInfo de tekitla-issues.
+func fromIssues(st *status.Status) bool {
+	for _, d := range st.Details() {
+		if info, ok := d.(*errdetails.ErrorInfo); ok && info.GetDomain() == issuesErrorDomain {
+			return true
+		}
+	}
+	return false
 }
