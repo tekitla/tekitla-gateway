@@ -50,6 +50,8 @@ type Options struct {
 	// Dispatch es el mux REST del gateway (con la política de rutas): cada
 	// llamada a una herramienta entra ahí como un request interno.
 	Dispatch http.Handler
+	// Custom: herramientas propias del repo (custom.go).
+	Custom []CustomTool
 }
 
 type tool struct {
@@ -67,7 +69,20 @@ func New(o Options) (http.Handler, error) {
 	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: o.Name, Version: o.Version}, nil)
 	var errs []error
+	// Tekitla: herramientas propias del repo (custom.go). Las que llevan el
+	// nombre de un mcp.tool de routes.yaml reemplazan a la genérica.
+	described := map[string]string{}
 	for _, p := range o.Routes.Tools() {
+		described[p.MCP.Name] = p.MCP.Description
+	}
+	replaced, err := addCustom(srv, o, described)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range o.Routes.Tools() {
+		if replaced[p.MCP.Name] {
+			continue
+		}
 		t, err := newTool(p, o.Bindings)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("routes.yaml: %s (mcp.tool %s): %w", p.Method, p.MCP.Name, err))

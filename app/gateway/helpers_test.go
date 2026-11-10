@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/tekitla/tekitla-gateway/app/auth"
@@ -49,6 +50,16 @@ type fakeUpstream struct {
 	md     metadata.MD
 	fail   error         // si no es nil, se devuelve en vez de la respuesta
 	delay  time.Duration // demora antes de responder (respeta el deadline)
+	// respond (opcional) arma la respuesta de un método a partir del request
+	// serializado; nil = respuesta vacía. Lo usan los tests de /mcp.
+	respond func(method string, req []byte) (proto.Message, error)
+	reqs    []upstreamCall
+}
+
+// upstreamCall: un request recibido (cuerpo serializado en protobuf).
+type upstreamCall struct {
+	method string
+	raw    []byte
 }
 
 func newFakeUpstream(t *testing.T) *fakeUpstream {
@@ -80,8 +91,24 @@ func (f *fakeUpstream) handle(_ any, stream grpc.ServerStream) error {
 	if err := stream.RecvMsg(&in); err != nil {
 		return err
 	}
+	// Los campos del request quedan como desconocidos de Empty: al
+	// serializar de nuevo salen tal cual.
+	raw, _ := proto.Marshal(&in)
+	f.mu.Lock()
+	f.reqs = append(f.reqs, upstreamCall{method: method, raw: raw})
+	respond := f.respond
+	f.mu.Unlock()
 	if fail != nil {
 		return fail
+	}
+	if respond != nil {
+		out, err := respond(method, raw)
+		if err != nil {
+			return err
+		}
+		if out != nil {
+			return stream.SendMsg(out)
+		}
 	}
 	return stream.SendMsg(&emptypb.Empty{})
 }
@@ -90,6 +117,13 @@ func (f *fakeUpstream) last() (string, metadata.MD, int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.method, f.md, f.calls
+}
+
+// requests devuelve los requests recibidos, en orden.
+func (f *fakeUpstream) requests() []upstreamCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.reqs)
 }
 
 func (f *fakeUpstream) set(fail error, delay time.Duration) {

@@ -17,6 +17,12 @@ dueña y `x-agent-id` = el agente. Las de `ActorService` (agentes y tokens)
 piden solo `allowlist`. `ImportIssue` está en `deny`. Nada público salvo
 `/healthz` y `/readyz`.
 
+`/mcp` (issue 030, opción `mcp` de la plantilla): cuatro herramientas de solo
+lectura, `list_projects`, `list_issues`, `get_issue` y `next_issue`, propias
+del repo (`app/mcptools`) sobre el gancho `app/mcpserver/custom.go`. Cada RPC
+que usan entra al mux con la política de su ruta. Sin escritura en esta fase.
+Detalle: `docs/rutas.md`; clientes: `README.md`.
+
 API gateway Go: **la única puerta pública** de la plataforma. Traduce REST/JSON
 a gRPC con grpc-gateway (rutas desde las anotaciones `google.api.http` de los
 `.proto`) y concentra los controles comunes. Auth: **firebase**. Deploy:
@@ -33,6 +39,8 @@ Generado desde la plantilla Copier `api-gateway` (`.copier-answers.yml`).
 | `app/gateway/` | Mux de grpc-gateway + middleware de ruta, errores, interceptor de metadata |
 | `app/middleware/` | request-id, logs redactados, recover, cabeceras de seguridad, CORS, limpieza de cabeceras |
 | `app/auth/` | JWT (Firebase/OIDC, JWKS en caché), API keys (SHA-256), allowlist de emails (`allowlist.go`) y tokens `tka_` (`tekitla_token.go`: caché y `TokenOrJWT`) |
+| `app/mcpserver/` | `/mcp` de la plantilla (SDK oficial) + `custom.go`: gancho para herramientas propias |
+| `app/mcptools/` | Herramientas MCP de Tekitla (clave de proyecto, composición de lecturas, `next_issue`) |
 | `app/upstream/tokenauth.go` | Cliente de `ResolveToken` (`auth.TokenResolver`), llamada interna por la conexión de `issues` |
 | `app/routes/`, `app/ratelimit/`, `app/config/` | routes.yaml, token bucket en memoria, variables de entorno |
 
@@ -40,6 +48,8 @@ Pipeline (en orden): request-id → access log → recover → cabeceras → COR
 borrar `X-User-Id`/`X-Agent-Id`/`X-Roles`/`Grpc-*` del cliente → mux → ruta declarada (404)
 → body (413) → auth (401/503) → roles/allowlist (403) → rate limit (429) →
 Content-Type (415) → deadline gRPC → interceptor (metadata desde cero).
+`/mcp` se atiende antes del mux (401 sin credencial) y cada herramienta
+vuelve a entrar al mux por la ruta que usa.
 Detalle: `docs/rutas.md`; auth: `docs/auth.md`.
 
 ## Agregar una ruta
@@ -59,6 +69,10 @@ Detalle: `docs/rutas.md`; auth: `docs/auth.md`.
    email ajeno, sin verificar o rol puesto como claim). Si falla por "sin
    entrada", la ruta no está declarada. `TestRutasDeTekitlaExigenAllowlist`
    fija la lista de rutas expuestas: actualizala si el contrato cambia.
+5. ¿Herramienta MCP? Solo lecturas en esta fase. Si sale de un método tal
+   cual, `mcp: {tool, description}` en la ruta; si compone o fija
+   parámetros, una propia en `app/mcptools` (declara sus `Methods`) y su
+   test en `app/gateway/mcp_test.go`.
 
 ## Repo de protos
 

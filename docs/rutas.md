@@ -181,40 +181,64 @@ Formato único para todo lo que responde el gateway:
 
 ## Herramientas MCP (`/mcp`)
 
-Un método de `routes.yaml` con `mcp:` también es una herramienta:
+Mecanismo de la plantilla: un método de `routes.yaml` con `mcp:` también es
+una herramienta.
 
 ```yaml
-example.v1.ItemService/GetItem:
-  roles: [items.read, items.admin]
+issues.v1.IssueService/GetIssue:
+  roles: [allowlist, issues:read]
   mcp:
-    tool: get_item               # verbo_objeto, inglés, snake_case, único
-    description: "Lee un item por id."
+    tool: get_issue              # verbo_objeto, inglés, snake_case, único
+    description: "Un issue por clave (RND-236): ..."
 ```
 
 - **Misma política que la ruta REST.** La llamada se traduce al request HTTP
-  (variables del path, body y query, con los nombres del `.proto`) y pasa por
-  el mismo mux: auth, roles, rate limit, límites y deadline. Un rol que falta
-  vuelve como resultado con `isError: true` y el error de la API
+  y pasa por el mismo mux: auth, roles, rate limit, límites y deadline. Un rol
+  que falta vuelve como resultado con `isError: true` y el error de la API
   (`PERMISSION_DENIED`), para que el agente sepa qué pasó.
-- **`/mcp` pide credencial**: la misma de la API (`Authorization: Bearer` o
-  `X-API-Key`). Sin ella, 401.
-- **Esquema de entrada** generado desde el mensaje de request; los campos del
-  path son obligatorios. **Anotaciones** desde el verbo: GET = sólo lectura
-  (el cliente no pide confirmación), POST = no destructivo, DELETE =
-  destructivo.
-- **Una herramienta por caso de uso**, con descripción corta: se paga en tokens
-  en cada sesión. Respuestas de más de 256 KiB se cortan con un error que pide
+- **`/mcp` pide credencial**: la misma de la API (`Authorization: Bearer`,
+  Firebase o `tka_`). Sin ella, o vencida o revocada, 401 (también para
+  listar las herramientas).
+- **Anotaciones** desde el verbo: GET = sólo lectura (el cliente no pide
+  confirmación). Respuestas de más de 256 KiB se cortan con un error que pide
   paginar.
-- **Auditoría:** una línea `mcp tool` por llamada con herramienta, ruta,
-  `user_id`, status y duración.
 
-Probarlo con Claude Code (`.mcp.json` del repo que lo consume, el token sale
-del entorno de cada persona):
+**En Tekitla (issue 030) las cuatro herramientas son propias del repo**
+(`app/mcptools`), porque la genérica no alcanza: el contrato pide el id del
+proyecto (los agentes conocen la clave `RND`), `get_issue` junta `GetIssue`
+con el historial y los nombres de estados y etiquetas, y `next_issue` fija
+filtros de `ListIssues` (que ya es `list_issues`; un método, una herramienta).
+El gancho (`app/mcpserver/custom.go`) mantiene la regla de la plantilla:
 
-```json
-{ "mcpServers": { "tekitla-gateway": { "type": "http", "url": "https://<host>/mcp",
-  "headers": { "Authorization": "Bearer ${API_TOKEN}" } } } }
-```
+- Una herramienta propia declara las rutas que llama (`Methods`); el gateway
+  no arranca si alguna no está en `routes.yaml`, está en `deny`, no tiene
+  `google.api.http` o no es GET (las propias son de solo lectura).
+- Cada llamada entra al mux como request REST con la credencial del cliente:
+  la política es la de esa ruta. No hay un segundo camino al servicio.
+- Si el nombre coincide con un `mcp.tool` de `routes.yaml`, reemplaza a la
+  genérica y toma la descripción de ahí; si no (`next_issue`), trae la suya.
+
+| Herramienta | Declarada en | RPC que usa (todas `allowlist` o `issues:read`) |
+|---|---|---|
+| `list_projects` | `routes.yaml` (`ListProjects`) | `ListProjects` + `ListIssues` (cuenta por categoría, de a 100) |
+| `list_issues` | `routes.yaml` (`ListIssues`) | `ListProjects` (clave → id), `ListStatuses`, `ListLabels`, `ListIssues` |
+| `get_issue` | `routes.yaml` (`GetIssue`) | `ListProjects`, `GetIssue`, `ListIssueEvents` (se recorre y quedan los últimos), `ListStatuses`, `ListLabels` |
+| `next_issue` | `app/mcptools` | `ListProjects`, `ListIssues` con `state=TODO`, `unassigned`, `order_by=PRIORITY_DESC`, `page.limit=1`, y nombres |
+
+Ninguna ruta de escritura lleva `mcp:` (`TestMCPSoloRutasDeLectura`). Cada
+RPC interno cuenta para el rate limit de su ruta.
+
+**Errores:** el de la API tal cual (`code`, `message`, `reason`,
+`request_id`) más un `hint` con qué hacer (pedir un token con
+`issues:read`, revisar la clave con `list_projects`, empezar sin cursor...).
+Una clave de proyecto que el token no ve es `NOT_FOUND` + `PROJECT_NOT_FOUND`.
+
+**Auditoría:** una línea `mcp tool` por llamada con herramienta, `user_id`,
+`agent_id` (token de agente), status y duración; cada RPC interno deja además
+su `http_request`.
+
+Configuración de los clientes (Claude Code, `.mcp.json`, Codex): `README.md`,
+sección MCP.
 
 ## Logs
 

@@ -69,6 +69,9 @@ type Options struct {
 	MCP bool
 	// Version: versión del servidor MCP que ve el cliente.
 	Version string
+	// MCPTools: herramientas propias del repo (app/mcptools), además de las
+	// que salen de routes.yaml.
+	MCPTools []mcpserver.CustomTool
 }
 
 // Report resume la validación de rutas que hace New.
@@ -150,6 +153,7 @@ func New(ctx context.Context, o Options) (http.Handler, *Report, error) {
 			Name:      "tekitla-gateway",
 			Version:   o.Version,
 			Dispatch:  mux,
+			Custom:    o.MCPTools,
 		})
 		if err != nil {
 			return nil, nil, err

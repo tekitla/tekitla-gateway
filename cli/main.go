@@ -15,6 +15,7 @@ import (
 	"github.com/tekitla/tekitla-gateway/app/auth"
 	"github.com/tekitla/tekitla-gateway/app/config"
 	"github.com/tekitla/tekitla-gateway/app/gateway"
+	"github.com/tekitla/tekitla-gateway/app/mcptools"
 	"github.com/tekitla/tekitla-gateway/app/middleware"
 	"github.com/tekitla/tekitla-gateway/app/ratelimit"
 	"github.com/tekitla/tekitla-gateway/app/reqctx"
@@ -127,6 +128,7 @@ func run() error {
 		Challenge:        challenge,
 		MCP:              true,
 		Version:          version,
+		MCPTools:         mcptools.Tools(),
 	})
 	if err != nil {
 		return err
