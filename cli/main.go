@@ -15,6 +15,7 @@ import (
 	"github.com/tekitla/tekitla-gateway/app/auth"
 	"github.com/tekitla/tekitla-gateway/app/config"
 	"github.com/tekitla/tekitla-gateway/app/gateway"
+	"github.com/tekitla/tekitla-gateway/app/mcptools"
 	"github.com/tekitla/tekitla-gateway/app/middleware"
 	"github.com/tekitla/tekitla-gateway/app/ratelimit"
 	"github.com/tekitla/tekitla-gateway/app/reqctx"
@@ -23,6 +24,10 @@ import (
 	"github.com/tekitla/tekitla-gateway/app/upstream"
 	"github.com/tekitla/tekitla-protos/gen/openapi"
 )
+
+// version la ve el cliente MCP; se pisa en el build con
+// -ldflags "-X main.version=v1.2.3".
+var version = "dev"
 
 func main() {
 	if len(os.Args) > 1 {
@@ -121,6 +126,9 @@ func run() error {
 		TrustedProxyHops: cfg.TrustedProxyHops,
 		OpenAPI:          spec,
 		Challenge:        challenge,
+		MCP:              true,
+		Version:          version,
+		MCPTools:         mcptools.Tools(),
 	})
 	if err != nil {
 		return err

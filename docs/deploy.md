@@ -33,8 +33,13 @@ docker login ghcr.io -u <usuario> --password-stdin
    ADR 0004; QA: `https://api-qa.tekitla.victorrb1015.com`):
    Coolify configura Traefik y el certificado. El gateway es lo único con dominio.
 3. **Red**: activá *Connect to Predefined Network* en este recurso **y** en
-   el de cada servicio gRPC; así el gateway los resuelve por nombre de
-   contenedor. Los servicios no necesitan dominio ni puertos publicados.
+   el de cada servicio gRPC. En cada servicio gRPC activá además
+   *Consistent name* con un nombre propio (p. ej. `items-qa`): con el nombre
+   generado (rolling updates) el contenedor se llama
+   `<servicio>-<uuid>-<timestamp>` y en la red sólo tiene ese alias y el del
+   servicio (`app`), así que `<servicio>-<uuid>` **no resuelve**. Con nombre
+   propio queda `<servicio>-<nombre>` (`app-items-qa`), estable entre
+   deploys. Los servicios no necesitan dominio ni puertos publicados.
 4. Anotá el UUID del recurso (`COOLIFY_RESOURCE_UUID_QA` / `_PROD`).
 
 ## 3. Variables del recurso
@@ -95,8 +100,12 @@ curl -s  -X OPTIONS https://api.qa.ejemplo.com/v1/projects   -H 'Origin: https:/
                                                       # Access-Control-Allow-Origin solo si el origen está en la lista
 ```
 
-`/readyz` en `unavailable`: revisar `UPSTREAM_*_ADDR` y que los dos recursos
-estén en la red predefinida (`docker network inspect coolify`).
+`/readyz` en `unavailable`: revisar `UPSTREAM_*_ADDR`, que el servicio tenga
+*Consistent name* y que los dos recursos estén en la red predefinida
+(`docker network inspect coolify` lista los alias de cada contenedor).
+
+El deploy de la CI es un `POST /api/v1/deploy?uuid=...`. Desde Coolify 4.6 un
+`GET` a esa ruta devuelve `405 Method Not Allowed`.
 
 ## Mudar a Cloud Run
 
