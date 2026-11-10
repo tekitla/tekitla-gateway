@@ -58,6 +58,10 @@ type tool struct {
 	policy  *routes.Policy
 	binding routes.Binding
 	fields  map[string]bool // campos del mensaje de request (nivel superior)
+	// limit: tope de la respuesta del mux; 0 = maxResultBytes. Las
+	// herramientas propias (custom.go) leen páginas intermedias más grandes
+	// que lo que devuelven al agente.
+	limit int
 }
 
 // New arma el handler de /mcp. Falla si una herramienta no se puede servir
@@ -264,7 +268,7 @@ func (t *tool) dispatch(ctx context.Context, mux http.Handler, header http.Heade
 			r.Header.Set(h, v)
 		}
 	}
-	rec := &recorder{header: http.Header{}}
+	rec := &recorder{header: http.Header{}, limit: t.limit}
 	mux.ServeHTTP(rec, r)
 	if rec.over {
 		return rec.code(), nil, inner
@@ -283,6 +287,7 @@ type recorder struct {
 	status int
 	buf    bytes.Buffer
 	over   bool
+	limit  int // 0 = maxResultBytes
 }
 
 var errTooLarge = errors.New("respuesta demasiado grande")
@@ -297,7 +302,11 @@ func (r *recorder) WriteHeader(status int) {
 
 func (r *recorder) Write(p []byte) (int, error) {
 	r.WriteHeader(http.StatusOK)
-	if r.buf.Len()+len(p) > maxResultBytes {
+	limit := r.limit
+	if limit == 0 {
+		limit = maxResultBytes
+	}
+	if r.buf.Len()+len(p) > limit {
 		r.over = true
 		return 0, errTooLarge
 	}

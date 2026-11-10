@@ -40,6 +40,9 @@ type CustomTool struct {
 	// Tienen que estar declaradas, sin deny y con google.api.http. Si todas
 	// son GET, la herramienta se anota como de solo lectura.
 	Methods []string
+	// Hint (opcional): qué hacer con un error de la API, por code (va en el
+	// campo hint del resultado para que el agente corrija sin adivinar).
+	Hint func(code string) string
 	// Handle hace el trabajo. El resultado se devuelve como JSON. Un error
 	// *CallError (una ruta respondió fuera de 2xx) o *ToolError se devuelve
 	// como resultado con IsError; cualquier otro, como INTERNAL genérico.
@@ -68,6 +71,11 @@ func (e *CallError) Error() string {
 	return fmt.Sprintf("%s: HTTP %d %s", e.Method, e.Status, e.Body.Error.Code)
 }
 
+// maxInternalBytes: tope de cada respuesta que lee una herramienta propia
+// (p. ej. 100 issues con descripción completa). Lo que llega al agente sigue
+// limitado a maxResultBytes.
+const maxInternalBytes = 8 << 20
+
 // Caller llama a las rutas declaradas de una herramienta propia con la
 // credencial del cliente.
 type Caller struct {
@@ -92,12 +100,12 @@ func (c *Caller) Get(ctx context.Context, method string, args map[string]any) ([
 	if err != nil {
 		return nil, &ToolError{Code: "INVALID_ARGUMENT", Message: err.Error()}
 	}
-	status, body, inner := (&tool{binding: b}).dispatch(ctx, c.mux, c.header, call)
+	status, body, inner := (&tool{binding: b, limit: maxInternalBytes}).dispatch(ctx, c.mux, c.header, call)
 	if inner.Identity != nil {
 		c.identity = inner.Identity
 	}
 	if body == nil {
-		return nil, &ToolError{Code: "RESOURCE_EXHAUSTED", Message: fmt.Sprintf("la respuesta supera %d KiB; pedí menos resultados", maxResultBytes>>10)}
+		return nil, &ToolError{Code: "RESOURCE_EXHAUSTED", Message: fmt.Sprintf("una respuesta interna supera %d MiB", maxInternalBytes>>20)}
 	}
 	if status < 200 || status > 299 {
 		ce := &CallError{Method: method, Status: status}
@@ -198,7 +206,7 @@ func customHandler(o Options, ct CustomTool, bindings map[string]routes.Binding,
 		c := &Caller{mux: o.Dispatch, header: header, bindings: bindings, allowed: allowed}
 		out, err := ct.Handle(ctx, c, args)
 
-		res, status := customResult(ctx, o, ct.Name, out, err)
+		res, status := customResult(ctx, o, ct, out, err)
 		// Auditoría (docs/15 §8): una línea por llamada, con actor, agente y resultado.
 		attrs := []any{
 			slog.String("request_id", reqctx.RequestID(ctx)),
@@ -206,10 +214,16 @@ func customHandler(o Options, ct CustomTool, bindings map[string]routes.Binding,
 			slog.Int("status", status),
 			slog.Int64("duration_ms", time.Since(start).Milliseconds()),
 		}
-		if c.identity != nil {
-			attrs = append(attrs, slog.String("user_id", c.identity.Subject))
-			if c.identity.AgentID != "" {
-				attrs = append(attrs, slog.String("agent_id", c.identity.AgentID))
+		// El actor es el de /mcp (guard lo deja en reqctx), también si la
+		// herramienta falla antes de llamar a una ruta.
+		id := c.identity
+		if info := reqctx.From(ctx); id == nil && info != nil {
+			id = info.Identity
+		}
+		if id != nil {
+			attrs = append(attrs, slog.String("user_id", id.Subject))
+			if id.AgentID != "" {
+				attrs = append(attrs, slog.String("agent_id", id.AgentID))
 			}
 		}
 		o.Logger.InfoContext(ctx, "mcp tool", attrs...)
@@ -218,7 +232,14 @@ func customHandler(o Options, ct CustomTool, bindings map[string]routes.Binding,
 }
 
 // customResult arma el resultado y el status para la auditoría.
-func customResult(ctx context.Context, o Options, name string, out any, err error) (*mcp.CallToolResult, int) {
+func customResult(ctx context.Context, o Options, ct CustomTool, out any, err error) (*mcp.CallToolResult, int) {
+	name := ct.Name
+	hint := func(code string) string {
+		if ct.Hint == nil {
+			return ""
+		}
+		return ct.Hint(code)
+	}
 	var ce *CallError
 	var te *ToolError
 	switch {
@@ -236,30 +257,28 @@ func customResult(ctx context.Context, o Options, name string, out any, err erro
 		return hinted(ce.Body.Error, hint(ce.Body.Error.Code)), ce.Status
 	case errors.As(err, &te):
 		d := apierror.Detail{Code: te.Code, Message: te.Message, Reason: te.Reason, RequestID: reqctx.RequestID(ctx)}
-		return hinted(d, ""), http.StatusBadRequest
+		return hinted(d, ""), statusOf(te.Code)
 	default:
 		o.Logger.ErrorContext(ctx, "mcp: herramienta propia", slog.String("tool", name), slog.String("error", err.Error()))
 		return errorResult(ctx, "INTERNAL", "error interno"), http.StatusInternalServerError
 	}
 }
 
-// hint: qué hacer con cada error, para que el agente corrija sin adivinar.
-func hint(code string) string {
+// statusOf: status HTTP de un ToolError, para la auditoría.
+func statusOf(code string) int {
 	switch code {
-	case "UNAUTHENTICATED":
-		return "Token ausente, vencido o revocado: pedile a la persona uno nuevo (tk token nuevo)."
-	case "PERMISSION_DENIED":
-		return "El token no tiene el permiso de esta herramienta (issues:read): hace falta un token con --permiso issues:read."
 	case "NOT_FOUND":
-		return "No existe o no es visible para este token: revisá la clave con list_projects o list_issues."
-	case "INVALID_ARGUMENT":
-		return "Revisá los argumentos. Si cambiaste filtros, empezá de nuevo sin cursor."
+		return http.StatusNotFound
 	case "RESOURCE_EXHAUSTED":
-		return "Límite de llamadas: esperá un minuto antes de reintentar."
-	case "UNAVAILABLE", "DEADLINE_EXCEEDED", "INTERNAL", "UNKNOWN":
-		return "Falla del servidor: reintentá en unos segundos; si sigue, avisá con el request_id."
+		return http.StatusTooManyRequests
+	case "PERMISSION_DENIED":
+		return http.StatusForbidden
+	case "UNAUTHENTICATED":
+		return http.StatusUnauthorized
+	case "INTERNAL", "UNKNOWN":
+		return http.StatusInternalServerError
 	}
-	return ""
+	return http.StatusBadRequest
 }
 
 type hintedBody struct {

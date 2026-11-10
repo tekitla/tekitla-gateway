@@ -541,3 +541,50 @@ func lastRequest(t *testing.T, e *env, method string) []byte {
 func statusNotFound() error { return status.Error(codes.NotFound, "issue not found") }
 
 func statusInternal() error { return status.Error(codes.Internal, "secreto: dsn=postgres://...") }
+
+// Una llamada que falla antes de tocar una ruta igual queda auditada con su
+// actor, y el status de la auditoría sigue al code del error.
+func TestMCPAuditoriaDeErrores(t *testing.T) {
+	e := newMCPEnv(t)
+	sess := e.mcpSession(e.creds.header("u-9", auth.ScopeIssuesRead))
+	if res, _ := e.callTool(sess, "get_issue", map[string]any{"key": "foo"}); !res.IsError {
+		t.Fatal("clave inválida sin error")
+	}
+	if res, _ := e.callTool(sess, "next_issue", map[string]any{"project": "XYZ"}); !res.IsError {
+		t.Fatal("proyecto ajeno sin error")
+	}
+	var lines []map[string]any
+	for _, l := range strings.Split(e.logs.String(), "\n") {
+		var m map[string]any
+		if json.Unmarshal([]byte(l), &m) == nil && m["msg"] == "mcp tool" {
+			lines = append(lines, m)
+		}
+	}
+	if len(lines) != 2 {
+		t.Fatalf("líneas de auditoría = %d", len(lines))
+	}
+	for i, want := range []float64{400, 404} {
+		if lines[i]["user_id"] != "u-9" || lines[i]["agent_id"] != "agente-de-u-9" || lines[i]["status"] != want {
+			t.Errorf("auditoría %d = %v", i, lines[i])
+		}
+	}
+}
+
+// events=0 no lee el historial.
+func TestMCPGetIssueSinEventos(t *testing.T) {
+	e := newMCPEnv(t)
+	sess := e.mcpSession(e.creds.header("u-1", auth.ScopeIssuesRead))
+	var d struct {
+		Key    string
+		Events []any
+	}
+	e.callOK(sess, "get_issue", map[string]any{"key": "RND-236", "events": 0}, &d)
+	if d.Key != "RND-236" || len(d.Events) != 0 {
+		t.Fatalf("issue = %+v", d)
+	}
+	for _, r := range e.up.requests() {
+		if strings.HasSuffix(r.method, "/ListIssueEvents") {
+			t.Fatal("events=0 leyó el historial")
+		}
+	}
+}

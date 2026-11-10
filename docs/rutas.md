@@ -226,7 +226,14 @@ El gancho (`app/mcpserver/custom.go`) mantiene la regla de la plantilla:
 | `next_issue` | `app/mcptools` | `ListProjects`, `ListIssues` con `state=TODO`, `unassigned`, `order_by=PRIORITY_DESC`, `page.limit=1`, y nombres |
 
 Ninguna ruta de escritura lleva `mcp:` (`TestMCPSoloRutasDeLectura`). Cada
-RPC interno cuenta para el rate limit de su ruta.
+RPC interno cuenta para el rate limit de su ruta, así que hay topes por
+llamada (`app/mcptools`): 10 páginas de `ListProjects` (`projects_partial`),
+20 páginas de `ListIssues` entre todos los proyectos para los conteos de
+`list_projects` (`counts_partial`: son un mínimo) y 10 de `ListIssueEvents`
+en `get_issue` (`events_partial`; con `events: 0` no se lee el historial).
+Los conteos exactos sin recorrer issues necesitan un RPC de conteo en el
+contrato (pendiente, fuera de esta fase). Las páginas internas se leen con
+un tope de 8 MiB; lo que llega al agente, con el de 256 KiB.
 
 **Errores:** el de la API tal cual (`code`, `message`, `reason`,
 `request_id`) más un `hint` con qué hacer (pedir un token con

@@ -43,8 +43,12 @@ const (
 )
 
 const (
-	pageMax          = 100 // MaxPageLimit de tekitla-issues
-	maxPages         = 20  // tope de páginas que recorre una herramienta
+	pageMax = 100 // MaxPageLimit de tekitla-issues
+	// Topes de páginas internas por llamada: cada una cuenta para el rate
+	// limit de su ruta (ListIssues: ráfaga de 60; las demás lecturas, 100).
+	maxProjectPages  = 10 // ListProjects: 1000 proyectos
+	countPageBudget  = 20 // ListIssues de list_projects, entre todos los proyectos
+	maxEventPages    = 10 // ListIssueEvents de get_issue: 1000 eventos
 	defaultListLimit = 20
 	defaultEvents    = 10
 	maxEvents        = 50
@@ -63,6 +67,7 @@ func Tools() []mcpserver.CustomTool {
 			InputSchema: object(nil),
 			Methods:     []string{mListProjects, mListIssues},
 			Handle:      listProjects,
+			Hint:        hint,
 		},
 		{
 			Name: "list_issues",
@@ -78,6 +83,7 @@ func Tools() []mcpserver.CustomTool {
 			}, "project"),
 			Methods: []string{mListProjects, mListIssues, mListStatuses, mListLabels},
 			Handle:  listIssues,
+			Hint:    hint,
 		},
 		{
 			Name: "get_issue",
@@ -87,6 +93,7 @@ func Tools() []mcpserver.CustomTool {
 			}, "key"),
 			Methods: []string{mListProjects, mGetIssue, mListEvents, mListStatuses, mListLabels},
 			Handle:  getIssue,
+			Hint:    hint,
 		},
 		{
 			Name:        "next_issue",
@@ -94,6 +101,7 @@ func Tools() []mcpserver.CustomTool {
 			InputSchema: object(map[string]any{"project": str("Clave del proyecto, p. ej. RND")}, "project"),
 			Methods:     []string{mListProjects, mListIssues, mListStatuses, mListLabels},
 			Handle:      nextIssue,
+			Hint:        hint,
 		},
 	}
 }
@@ -106,31 +114,39 @@ type projectOut struct {
 	Key    string         `json:"key"`
 	Name   string         `json:"name"`
 	Counts map[string]int `json:"counts"`
-	// CountsPartial: el proyecto tiene más issues de los que se cuentan
-	// (maxPages * pageMax); los conteos son un mínimo.
+	// CountsPartial: no se llegaron a contar todos sus issues (el contrato
+	// no tiene un conteo y se recorren con un tope); son un mínimo.
 	CountsPartial bool `json:"counts_partial,omitempty"`
+}
+
+type projectsOut struct {
+	Projects []projectOut `json:"projects"`
+	// Partial: hay más proyectos de los que se listan (maxProjectPages).
+	Partial bool `json:"projects_partial,omitempty"`
 }
 
 func listProjects(ctx context.Context, c *mcpserver.Caller, args map[string]any) (any, error) {
 	if err := onlyKeys(args); err != nil {
 		return nil, err
 	}
-	projects, err := allProjects(ctx, c)
+	projects, partial, err := allProjects(ctx, c)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]projectOut, 0, len(projects))
+	out := projectsOut{Projects: make([]projectOut, 0, len(projects)), Partial: partial}
+	budget := countPageBudget
 	for _, p := range projects {
 		po := projectOut{Key: p.GetKey(), Name: p.GetName(), Counts: map[string]int{}}
 		for _, n := range categoryNames {
 			po.Counts[n] = 0
 		}
 		cursor := ""
-		for i := 0; ; i++ {
-			if i == maxPages {
+		for {
+			if budget == 0 {
 				po.CountsPartial = true
 				break
 			}
+			budget--
 			var resp issuesv1.ListIssuesResponse
 			if err := get(ctx, c, mListIssues, map[string]any{"project_id": p.GetId(), "page": page(cursor, pageMax)}, &resp); err != nil {
 				return nil, err
@@ -145,9 +161,9 @@ func listProjects(ctx context.Context, c *mcpserver.Caller, args map[string]any)
 			}
 			cursor = resp.GetPage().GetNextCursor()
 		}
-		out = append(out, po)
+		out.Projects = append(out.Projects, po)
 	}
-	return map[string]any{"projects": out}, nil
+	return out, nil
 }
 
 type issueOut struct {
@@ -169,15 +185,8 @@ func listIssues(ctx context.Context, c *mcpserver.Caller, args map[string]any) (
 	if err := onlyKeys(args, "project", "category", "status", "priority", "assignee", "query", "cursor", "limit"); err != nil {
 		return nil, err
 	}
+	// Primero todos los argumentos: un error no gasta llamadas al servicio.
 	key, err := strArg(args, "project", true)
-	if err != nil {
-		return nil, err
-	}
-	p, err := findProject(ctx, c, key)
-	if err != nil {
-		return nil, err
-	}
-	names, err := loadNames(ctx, c, p.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -189,25 +198,21 @@ func listIssues(ctx context.Context, c *mcpserver.Caller, args map[string]any) (
 	if err != nil {
 		return nil, err
 	}
-	q := map[string]any{"project_id": p.GetId(), "page": page(cursor, limit)}
-
-	if cat, err := strArg(args, "category", false); err != nil {
+	q := map[string]any{"page": page(cursor, limit)}
+	cat, err := strArg(args, "category", false)
+	if err != nil {
 		return nil, err
-	} else if cat != "" {
+	}
+	if cat != "" {
 		st, ok := categoryByName[cat]
 		if !ok {
 			return nil, invalid("category: una de %s", strings.Join(categoryNames, ", "))
 		}
 		q["state"] = st.String()
 	}
-	if status, err := strArg(args, "status", false); err != nil {
+	status, err := strArg(args, "status", false)
+	if err != nil {
 		return nil, err
-	} else if status != "" {
-		id, ok := names.statusID(status)
-		if !ok {
-			return nil, invalid("status: %q no es un estado de %s; los estados son: %s", status, p.GetKey(), strings.Join(names.statusNames(), ", "))
-		}
-		q["status_ids"] = []any{id}
 	}
 	if pr, ok := args["priority"]; ok {
 		list, isList := pr.([]any)
@@ -230,17 +235,38 @@ func listIssues(ctx context.Context, c *mcpserver.Caller, args map[string]any) (
 			q["priorities"] = prs
 		}
 	}
-	if as, err := strArg(args, "assignee", false); err != nil {
+	as, err := strArg(args, "assignee", false)
+	if err != nil {
 		return nil, err
-	} else if as == "none" {
+	}
+	if as == "none" {
 		q["unassigned"] = true
 	} else if as != "" {
 		q["assignee_actor_ids"] = []any{as}
 	}
-	if query, err := strArg(args, "query", false); err != nil {
+	query, err := strArg(args, "query", false)
+	if err != nil {
 		return nil, err
-	} else if query != "" {
+	}
+	if query != "" {
 		q["query"] = query
+	}
+
+	p, err := findProject(ctx, c, key)
+	if err != nil {
+		return nil, err
+	}
+	q["project_id"] = p.GetId()
+	names, err := loadNames(ctx, c, p.GetId())
+	if err != nil {
+		return nil, err
+	}
+	if status != "" {
+		id, ok := names.statusID(status)
+		if !ok {
+			return nil, invalid("status: %q no es un estado de %s; los estados son: %s", status, p.GetKey(), strings.Join(names.statusNames(), ", "))
+		}
+		q["status_ids"] = []any{id}
 	}
 
 	var resp issuesv1.ListIssuesResponse
@@ -306,9 +332,10 @@ type issueDetail struct {
 	CreatedAt     string     `json:"created_at"`
 	UpdatedAt     string     `json:"updated_at"`
 	Events        []eventOut `json:"events"`
-	EventsTotal   int        `json:"events_total"`
-	// EventsPartial: el historial es más largo de lo que se recorre; los
-	// eventos que se muestran no son los últimos.
+	// EventsTotal: largo del historial (con events=0 no se lee y no viene).
+	EventsTotal int `json:"events_total,omitempty"`
+	// EventsPartial: el historial es más largo de lo que se recorre
+	// (maxEventPages); los eventos que se muestran no son los últimos.
 	EventsPartial bool `json:"events_partial,omitempty"`
 }
 
@@ -353,11 +380,15 @@ func getIssue(ctx context.Context, c *mcpserver.Caller, args map[string]any) (an
 		Events:        []eventOut{},
 	}
 
-	// El historial viene del más viejo al más nuevo: se recorre y se quedan
-	// los últimos nEvents.
+	if nEvents == 0 {
+		return d, nil
+	}
+	// El historial viene del más viejo al más nuevo y el contrato no deja
+	// pedir el final: se recorre (con tope) y se quedan los últimos nEvents.
+	var all []*issuesv1.IssueEvent
 	cursor := ""
 	for i := 0; ; i++ {
-		if i == maxPages {
+		if i == maxEventPages {
 			d.EventsPartial = true
 			break
 		}
@@ -365,20 +396,15 @@ func getIssue(ctx context.Context, c *mcpserver.Caller, args map[string]any) (an
 		if err := get(ctx, c, mListEvents, map[string]any{"project_id": p.GetId(), "number": m[2], "page": page(cursor, pageMax)}, &ev); err != nil {
 			return nil, err
 		}
-		for _, e := range ev.GetEvents() {
-			d.EventsTotal++
-			if nEvents == 0 {
-				continue
-			}
-			d.Events = append(d.Events, event(e, names))
-			if len(d.Events) > nEvents {
-				d.Events = d.Events[1:]
-			}
-		}
+		all = append(all, ev.GetEvents()...)
 		if !ev.GetPage().GetHasNext() {
 			break
 		}
 		cursor = ev.GetPage().GetNextCursor()
+	}
+	d.EventsTotal = len(all)
+	for _, e := range all[max(0, len(all)-nEvents):] {
+		d.Events = append(d.Events, event(e, names))
 	}
 	return d, nil
 }
@@ -408,21 +434,22 @@ func page(cursor string, limit int) map[string]any {
 	return p
 }
 
-func allProjects(ctx context.Context, c *mcpserver.Caller) ([]*issuesv1.Project, error) {
+// allProjects: los proyectos visibles; partial = hay más de los que se leen.
+func allProjects(ctx context.Context, c *mcpserver.Caller) ([]*issuesv1.Project, bool, error) {
 	var out []*issuesv1.Project
 	cursor := ""
-	for range maxPages {
+	for range maxProjectPages {
 		var resp issuesv1.ListProjectsResponse
 		if err := get(ctx, c, mListProjects, map[string]any{"page": page(cursor, pageMax)}, &resp); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		out = append(out, resp.GetProjects()...)
 		if !resp.GetPage().GetHasNext() {
-			break
+			return out, false, nil
 		}
 		cursor = resp.GetPage().GetNextCursor()
 	}
-	return out, nil
+	return out, true, nil
 }
 
 var projectKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
@@ -434,7 +461,7 @@ func findProject(ctx context.Context, c *mcpserver.Caller, key string) (*issuesv
 	if !projectKeyRe.MatchString(key) {
 		return nil, invalid("project: clave de proyecto como RND (2 a 10 letras o dígitos)")
 	}
-	projects, err := allProjects(ctx, c)
+	projects, partial, err := allProjects(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -443,8 +470,31 @@ func findProject(ctx context.Context, c *mcpserver.Caller, key string) (*issuesv
 			return p, nil
 		}
 	}
+	if partial {
+		return nil, &mcpserver.ToolError{Code: "NOT_FOUND", Reason: "PROJECT_NOT_FOUND",
+			Message: fmt.Sprintf("%s no está entre los primeros %d proyectos visibles para este token", key, maxProjectPages*pageMax)}
+	}
 	return nil, &mcpserver.ToolError{Code: "NOT_FOUND", Reason: "PROJECT_NOT_FOUND",
 		Message: fmt.Sprintf("no hay un proyecto %s visible para este token; list_projects muestra las claves", key)}
+}
+
+// hint: qué hacer con un error de la API, por code (va en el resultado).
+func hint(code string) string {
+	switch code {
+	case "UNAUTHENTICATED":
+		return "Token ausente, vencido o revocado: pedile a la persona uno nuevo (tk token nuevo)."
+	case "PERMISSION_DENIED":
+		return "El token no tiene issues:read: hace falta uno con tk token nuevo --permiso issues:read."
+	case "NOT_FOUND":
+		return "No existe o no es visible para este token: revisá la clave con list_projects o list_issues."
+	case "INVALID_ARGUMENT":
+		return "Revisá los argumentos. Si cambiaste filtros, empezá de nuevo sin cursor."
+	case "RESOURCE_EXHAUSTED":
+		return "Límite de llamadas: esperá un minuto antes de reintentar."
+	case "UNAVAILABLE", "DEADLINE_EXCEEDED", "INTERNAL", "UNKNOWN":
+		return "Falla del servidor: reintentá en unos segundos; si sigue, avisá con el request_id."
+	}
+	return ""
 }
 
 // names: estados y etiquetas del proyecto, para mostrar nombres y no ids.
