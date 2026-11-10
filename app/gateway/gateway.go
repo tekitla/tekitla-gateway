@@ -11,6 +11,8 @@
 //	middleware.CORS           lista de orígenes por entorno
 //	middleware.StripSpoofable borra x-user-id/x-roles/Grpc-* que mande el cliente
 //	builtin                   /healthz, /readyz, /openapi.json
+//	/mcp                      herramientas MCP (app/mcpserver): cada llamada
+//	                          vuelve a entrar al mux como request REST
 //	runtime.ServeMux          match de la ruta -> routeMiddleware:
 //	    ruta declarada (si no, 404) -> límite de body (413) -> auth (401/503)
 //	    -> roles (403) -> rate limit (429) -> Content-Type (415) -> deadline
@@ -35,6 +37,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/tekitla/tekitla-gateway/app/auth"
+	"github.com/tekitla/tekitla-gateway/app/mcpserver"
 	"github.com/tekitla/tekitla-gateway/app/middleware"
 	"github.com/tekitla/tekitla-gateway/app/ratelimit"
 	"github.com/tekitla/tekitla-gateway/app/reqctx"
@@ -62,6 +65,10 @@ type Options struct {
 	OpenAPI []byte
 	// Challenge: valor de WWW-Authenticate en los 401 ("Bearer" con JWT).
 	Challenge string
+	// MCP: sirve /mcp con los métodos de routes.yaml que tienen `mcp:`.
+	MCP bool
+	// Version: versión del servidor MCP que ve el cliente.
+	Version string
 }
 
 // Report resume la validación de rutas que hace New.
@@ -133,6 +140,22 @@ func New(ctx context.Context, o Options) (http.Handler, *Report, error) {
 	}
 
 	h := builtin(o, mux)
+	if o.MCP {
+		mh, err := mcpserver.New(mcpserver.Options{
+			Logger:    o.Logger,
+			Routes:    o.Routes,
+			Bindings:  bindings,
+			Auth:      o.Auth,
+			Challenge: o.Challenge,
+			Name:      "tekitla-gateway",
+			Version:   o.Version,
+			Dispatch:  mux,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		h = withMCP(mh, h)
+	}
 	h = middleware.Chain(h,
 		middleware.Context(o.TrustedProxyHops),
 		middleware.AccessLog(o.Logger),
@@ -206,6 +229,17 @@ func builtin(o Options, next http.Handler) http.Handler {
 		default:
 			next.ServeHTTP(w, r)
 		}
+	})
+}
+
+// withMCP atiende /mcp antes del mux (no es una ruta de routes.yaml).
+func withMCP(mcpHandler, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == mcpserver.Path {
+			mcpHandler.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 

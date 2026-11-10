@@ -25,6 +25,10 @@
 #     per_minute: 30      o por IP si es anónimo). Sin rate_limit, la ruta
 #     burst: 10           usa el bucket global de `defaults`.
 #   sunset: 2027-01-31    ruta deprecada: cabeceras Deprecation + Sunset
+#   mcp:                  también es herramienta de /mcp (misma política):
+#     tool: get_item      verbo_objeto en inglés, snake_case, único
+#     description: "..."  corta y concreta (se paga en tokens en cada sesión)
+#                         Lectura con GET: el cliente no pide confirmación.
 #
 # Al agregar una ruta: anotación en el .proto -> regenerar -> entrada acá ->
 # go test ./... (los tests de autorización se generan desde esta tabla).

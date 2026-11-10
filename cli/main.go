@@ -24,6 +24,10 @@ import (
 	"github.com/tekitla/tekitla-protos/gen/openapi"
 )
 
+// version la ve el cliente MCP; se pisa en el build con
+// -ldflags "-X main.version=v1.2.3".
+var version = "dev"
+
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -121,6 +125,8 @@ func run() error {
 		TrustedProxyHops: cfg.TrustedProxyHops,
 		OpenAPI:          spec,
 		Challenge:        challenge,
+		MCP:              true,
+		Version:          version,
 	})
 	if err != nil {
 		return err

@@ -1,5 +1,5 @@
 # Respuestas de Copier: NO editar a mano. Las usa `copier update`.
-_commit: v0.2.0
+_commit: v0.3.0
 _src_path: gh:dev-plantillas/template-api-gateway
 auth: firebase
 ci_provider: github
@@ -9,9 +9,11 @@ dueño: '@vrojas1015'
 firebase_project: tekitla-app
 go_version: 1.26.10
 http_port: 8080
+mcp: true
 module_path: github.com/tekitla/tekitla-gateway
 protos_module: github.com/tekitla/tekitla-protos
 protos_version: v0.2.0
 repo_name: tekitla-gateway
 service_description: 'Entrada pública REST de Tekitla: autentica con Firebase y traduce
     a gRPC.'
+tracker_mcp: false
