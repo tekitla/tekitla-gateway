@@ -12,7 +12,7 @@
 # ──────────────────────────────────────────────
 # STAGE 1: BUILD
 # ──────────────────────────────────────────────
-FROM golang:1.26.10 AS builder
+FROM golang:1.26.11 AS builder
 
 # GOWORK=off: -mod=vendor es incompatible con go.work (ver `make workspace`).
 ENV CGO_ENABLED=0 \
