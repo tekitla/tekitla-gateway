@@ -56,6 +56,32 @@ literal en `~/.claude.json` y Claude Code lo expande del entorno al arrancar.
 Con comillas dobles la shell escribe el token en el archivo. Para QA, la misma
 URL con `api-qa` (p. ej. un segundo servidor `tracker-qa`).
 
+#### 401 «Server rejected the configured Authorization header»
+
+Si `/mcp` responde 401 con el header configurado, lo más probable es que
+`TRACKER_TOKEN` no exista **en el proceso de Claude Code**: entonces manda
+`Authorization: Bearer` sin token. Revisalo en la terminal desde la que abrís
+`claude`:
+
+```powershell
+if ($env:TRACKER_TOKEN) { 'TRACKER_TOKEN cargada' } else { 'TRACKER_TOKEN ausente' }
+```
+
+(sin imprimir el valor). Una variable de usuario nueva solo llega a los
+procesos que arrancan después de crearla: en Windows con **herdr**, o con una
+terminal abierta antes, no la ven ni herdr ni sus pestañas. Dos salidas:
+
+- Reiniciar herdr (o abrir una terminal nueva).
+- Cargarla en la pestaña actual antes de abrir `claude`:
+
+  ```powershell
+  $env:TRACKER_TOKEN = [Environment]::GetEnvironmentVariable('TRACKER_TOKEN','User')
+  ```
+
+Si la variable está y sigue el 401, el token venció o lo revocaron
+(`tk tokens`, columna ESTADO): creá otro con `tk token nuevo`, en el mismo
+ambiente que la URL del servidor (`--ambiente qa` para `api-qa`).
+
 ### Repos generados con dev-plantillas (`.mcp.json`)
 
 La base común (`tracker_mcp: true` en Copier) trae el servidor `tracker` en el
