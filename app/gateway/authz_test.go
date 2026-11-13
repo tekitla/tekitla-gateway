@@ -117,6 +117,8 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		"PATCH /v1/projects/{project_id}/issues/{number}",
 		"POST /v1/projects/{project_id}/issues/{number}/comments",
 		"GET /v1/projects/{project_id}/issues/{number}/events",
+		// Issue 036: métricas de flujo.
+		"GET /v1/projects/{project_id}/flowMetrics",
 		"GET /v1/projects/{project_id}/statuses", "POST /v1/projects/{project_id}/statuses",
 		"PATCH /v1/projects/{project_id}/statuses/{status_id}", "DELETE /v1/projects/{project_id}/statuses/{status_id}",
 		"POST /v1/projects/{project_id}/statuses:batchUpdate",
@@ -126,7 +128,7 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		"GET /v1/actors", "POST /v1/agents", "POST /v1/actors/{actor_id}:revoke",
 		"GET /v1/tokens", "POST /v1/tokens", "POST /v1/tokens/{token_id}:revoke",
 	}
-	denied := []string{"issues.v1.IssueService/ImportIssue"}
+	denied := []string{"issues.v1.IssueService/ImportIssue", "issues.v1.IssueService/ImportIssueEvents"}
 	var got, gotDenied []string
 	for _, b := range e.report.Bindings {
 		pol := e.table.Policy(b.Method)

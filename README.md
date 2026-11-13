@@ -26,6 +26,7 @@ agentes (issue 030, fase 1). **Solo lectura**: ninguna herramienta escribe.
 | `list_issues` | Issues de un proyecto (`project: "RND"`) con filtros `category` (`todo`, `in_progress`, `done`, `canceled`), `status` (nombre de la columna), `priority`, `assignee` (id del actor o `"none"`) y `query`; 20 por página, `next_cursor` para seguir |
 | `get_issue` | Un issue por clave (`RND-236`): descripción, estado, prioridad, etiquetas, asignado y últimos eventos (`events`, 10 por defecto) |
 | `next_issue` | El siguiente issue libre de un proyecto: «por hacer», sin asignar, de mayor prioridad y después por rank. **No lo toma** |
+| `get_flow_metrics` | Métricas de flujo de un proyecto por semana (issue 036): lead y cycle time (mediana y p85, en días), cerrados (valor y otros), empezados, en curso y estancados. `from`/`to` (`YYYY-MM-DD`, 12 semanas por defecto), `labels` y `time_zone` (`America/Mexico_City` por defecto). Cada número dice si es «registrado en vivo» o «histórico aproximado» |
 
 **Credencial:** un token de agente `tka_` con `issues:read` (o la sesión de
 Firebase de la dueña). Se saca con la CLI (`tekitla-cli` v0.2):

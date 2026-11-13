@@ -8,7 +8,8 @@
 // cliente: la política (roles allowlist o issues:read, rate limit, deadline)
 // es la de su ruta en routes.yaml. list_projects, list_issues y get_issue
 // toman nombre y descripción de routes.yaml; next_issue, que usa ListIssues
-// con filtros fijos, trae los suyos acá.
+// con filtros fijos, trae los suyos acá. get_flow_metrics (issue 036, flow.go)
+// toma los suyos de la ruta de GetFlowMetrics.
 //
 // Las herramientas devuelven datos, no instrucciones: el contenido de un
 // issue lo escribe cualquiera con acceso al proyecto.
@@ -103,6 +104,7 @@ func Tools() []mcpserver.CustomTool {
 			Handle:      nextIssue,
 			Hint:        hint,
 		},
+		flowMetricsTool(),
 	}
 }
 
