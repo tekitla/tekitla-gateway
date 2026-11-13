@@ -199,6 +199,10 @@ func tekitlaFake(method string, raw []byte) (proto.Message, error) {
 		}
 		items, page := pageOf(match, in.GetPage(), fakeIssue)
 		return &issuesv1.ListIssuesResponse{Issues: items, Page: page}, nil
+	case "/issues.v1.IssueService/GetFlowMetrics":
+		var in issuesv1.GetFlowMetricsRequest
+		_ = proto.Unmarshal(raw, &in)
+		return fakeFlowMetrics(&in), nil
 	}
 	return nil, nil
 }
@@ -216,7 +220,7 @@ func newMCPEnv(t *testing.T) *env {
 // Tests
 // ---------------------------------------------------------------------------
 
-var wantTools = []string{"get_issue", "list_issues", "list_projects", "next_issue"}
+var wantTools = []string{"get_flow_metrics", "get_issue", "list_issues", "list_projects", "next_issue"}
 
 // CU-030-1: las cuatro herramientas, todas de solo lectura y ninguna de escritura.
 func TestMCPHerramientas(t *testing.T) {

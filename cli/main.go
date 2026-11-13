@@ -11,6 +11,9 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	// Zonas IANA embebidas: get_flow_metrics lee las fechas en la zona que
+	// pide el cliente (036) y no depende del tzdata de la imagen.
+	_ "time/tzdata"
 
 	"github.com/tekitla/tekitla-gateway/app/auth"
 	"github.com/tekitla/tekitla-gateway/app/config"

@@ -17,13 +17,14 @@
 
 ## Rutas de Tekitla
 
-Las 20 de `issues.v1.IssueService` (tekitla-protos `v0.5.0`: rebanada 1, 3a e
-issues 011, 013 y 025; el 012 suma parámetros a `ListIssues`), con
+Las 21 de `issues.v1.IssueService` (tekitla-protos `v0.7.0`: rebanada 1, 3a e
+issues 011, 013, 025 y 036; el 012 suma parámetros a `ListIssues`), con
 `roles: [allowlist, issues:read]` las lecturas y `[allowlist, issues:write]`
 las escrituras (sesión de Firebase en la allowlist **o** un token `tka_` con
 ese scope; docs/auth.md), y las 6 de `issues.v1.ActorService` (issue 025),
-solo con `allowlist`. `ImportIssue` (`/v1/admin/...`) está declarada con
-`deny: true`: no se expone. Lecturas: bucket global (600/min, ráfaga
+solo con `allowlist`. `ImportIssue` e `ImportIssueEvents` (`/v1/admin/...`)
+están declaradas con `deny: true`: no se exponen (el importador va directo
+por gRPC). Lecturas: bucket global (600/min, ráfaga
 100), salvo `ListIssues`. Escrituras: body ≤ 64 KiB (`UpdateIssue`,
 128 KiB por la descripción), timeout 5 s (`DeleteStatus` y
 `BatchUpdateStatuses`, 10 s: mueven issues) y bucket propio por usuario.
@@ -41,6 +42,7 @@ solo con `allowlist`. `ImportIssue` (`/v1/admin/...`) está declarada con
 | `UpdateIssue` | `PATCH /v1/projects/{project_id}/issues/{number}` | 120/min, ráfaga 30 |
 | `CreateComment` | `POST /v1/projects/{project_id}/issues/{number}/comments` | 60/min, ráfaga 20 |
 | `ListIssueEvents` | `GET /v1/projects/{project_id}/issues/{number}/events` | global |
+| `GetFlowMetrics` | `GET /v1/projects/{project_id}/flowMetrics` | global (issue 036) |
 | `ListStatuses` | `GET /v1/projects/{project_id}/statuses` | global |
 | `CreateStatus` | `POST /v1/projects/{project_id}/statuses` | 30/min, ráfaga 10 |
 | `UpdateStatus` | `PATCH /v1/projects/{project_id}/statuses/{status_id}` | 30/min, ráfaga 10 |
@@ -203,7 +205,7 @@ issues.v1.IssueService/GetIssue:
   confirmación). Respuestas de más de 256 KiB se cortan con un error que pide
   paginar.
 
-**En Tekitla (issue 030) las cuatro herramientas son propias del repo**
+**En Tekitla (issues 030 y 036) las cinco herramientas son propias del repo**
 (`app/mcptools`), porque la genérica no alcanza: el contrato pide el id del
 proyecto (los agentes conocen la clave `RND`), `get_issue` junta `GetIssue`
 con el historial y los nombres de estados y etiquetas, y `next_issue` fija
@@ -224,6 +226,7 @@ El gancho (`app/mcpserver/custom.go`) mantiene la regla de la plantilla:
 | `list_issues` | `routes.yaml` (`ListIssues`) | `ListProjects` (clave → id), `ListStatuses`, `ListLabels`, `ListIssues` |
 | `get_issue` | `routes.yaml` (`GetIssue`) | `ListProjects`, `GetIssue`, `ListIssueEvents` (se recorre y quedan los últimos), `ListStatuses`, `ListLabels` |
 | `next_issue` | `app/mcptools` | `ListProjects`, `ListIssues` con `state=TODO`, `unassigned`, `order_by=PRIORITY_DESC`, `page.limit=1`, y nombres |
+| `get_flow_metrics` | `routes.yaml` (`GetFlowMetrics`) | `ListProjects`, `ListStatuses`, `ListLabels` (nombres de etiquetas → ids), `GetFlowMetrics` con `from`/`to` = las 00:00 de los días pedidos en `time_zone` (`to` incluido) |
 
 Ninguna ruta de escritura lleva `mcp:` (`TestMCPSoloRutasDeLectura`). Cada
 RPC interno cuenta para el rate limit de su ruta, así que hay topes por
