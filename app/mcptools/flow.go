@@ -61,7 +61,11 @@ type durationOut struct {
 }
 
 type weekOut struct {
-	Week        string      `json:"week"`
+	Week string `json:"week"`
+	// End: último día incluido. La primera y la última semana pueden ser
+	// más cortas (se recortan a from y to): Partial lo dice.
+	End         string      `json:"end"`
+	Partial     bool        `json:"partial,omitempty"`
 	LeadTime    durationOut `json:"lead_time"`
 	CycleTime   durationOut `json:"cycle_time"`
 	ClosedValue int32       `json:"closed_value"`
@@ -211,8 +215,10 @@ func flowResult(projectKey string, r *issuesv1.GetFlowMetricsResponse, n *names,
 		ValueLabels:      []string{},
 	}
 	for _, w := range r.GetWeeks() {
+		start, end := w.GetStart().AsTime(), w.GetEnd().AsTime()
 		out.Weeks = append(out.Weeks, weekOut{
-			Week:     day(w.GetStart(), loc),
+			Week: day(w.GetStart(), loc), End: lastDay(w.GetEnd(), loc),
+			Partial:  end.Sub(start) < 6*24*time.Hour+23*time.Hour,
 			LeadTime: durationDays(w.GetLeadTime()), CycleTime: durationDays(w.GetCycleTime()),
 			ClosedValue: w.GetClosedValue(), ClosedOther: w.GetClosedOther(), Canceled: w.GetCanceled(),
 			Started: w.GetStarted(), WIP: w.GetWip(), Source: confidence(w.GetSource().GetConfidence()),
@@ -223,11 +229,14 @@ func flowResult(projectKey string, r *issuesv1.GetFlowMetricsResponse, n *names,
 		if i == nStale {
 			break
 		}
-		last := st.GetLastActivityAt().AsTime()
+		last := st.GetInProgressSince()
+		if st.GetLastActivityAt() != nil {
+			last = st.GetLastActivityAt()
+		}
 		out.Stale = append(out.Stale, staleOut{
 			Key: fmt.Sprintf("%s-%d", projectKey, st.GetNumber()), Title: st.GetTitle(), Status: n.status(st.GetStatusId()),
-			InProgressSince: day(st.GetInProgressSince(), loc), LastActivity: day(st.GetLastActivityAt(), loc),
-			DaysIdle: int(to.Sub(last).Hours() / 24), Source: confidence(st.GetConfidence()),
+			InProgressSince: day(st.GetInProgressSince(), loc), LastActivity: day(last, loc),
+			DaysIdle: int(to.Sub(last.AsTime()).Hours() / 24), Source: confidence(st.GetConfidence()),
 		})
 	}
 	for _, id := range r.GetValueLabelIds() {
@@ -239,12 +248,12 @@ func flowResult(projectKey string, r *issuesv1.GetFlowMetricsResponse, n *names,
 	out.Notes = append(out.Notes,
 		"Lead time: de creado a hecho. Cycle time: de la primera vez en curso a hecho. Mediana y percentil 85 de los que terminaron esa semana.",
 		"Métricas del sistema, no de personas: sirven para ver dónde se atora el trabajo.")
-	if len(out.ValueLabels) == 0 {
+	if len(r.GetValueLabelIds()) == 0 {
 		out.Notes = append(out.Notes, "El proyecto no tiene etiquetas de valor: todo lo hecho cuenta como closed_value.")
 	} else {
 		out.Notes = append(out.Notes, "closed_value: hechos con alguna etiqueta de value_labels; closed_other, el resto. Lead y cycle time son de todo lo hecho.")
 	}
-	if s.GetSource().GetConfidence() == issuesv1.MetricConfidence_METRIC_CONFIDENCE_APPROXIMATE {
+	if anyApproximate(r) {
 		out.Notes = append(out.Notes, "«histórico aproximado»: hay fechas reconstruidas de un importador (commits o fechas escritas en el archivo); los estados se cambiaban a mano y a veces tarde.")
 	}
 	if out.DoneWithoutDates > 0 {
@@ -291,10 +300,47 @@ func lastDay(t *timestamppb.Timestamp, loc *time.Location) string {
 		return ""
 	}
 	lt := t.AsTime().In(loc)
-	if lt.Hour() == 0 && lt.Minute() == 0 && lt.Second() == 0 && lt.Nanosecond() == 0 {
+	if lt.Equal(startOfDay(lt, loc)) {
 		lt = lt.AddDate(0, 0, -1)
 	}
 	return lt.Format(time.DateOnly)
+}
+
+// startOfDay: el primer instante del día de t en loc (las 00:00, o la
+// primera hora que existe si el cambio de horario se las salta).
+func startOfDay(t time.Time, loc *time.Location) time.Time {
+	return dayStart(t.In(loc).Format(time.DateOnly), loc)
+}
+
+// dayStart: el primer instante de date (YYYY-MM-DD) en loc. time.Date no
+// garantiza adónde lleva unas 00:00 que no existen (puede dar las 23:00 del
+// día anterior): se avanza de a 15 minutos hasta caer en el día. Es la misma
+// regla que usa tekitla-issues para las semanas (model.FlowWeekBounds).
+func dayStart(date string, loc *time.Location) time.Time {
+	d, _ := time.ParseInLocation(time.DateOnly, date, loc)
+	for d.In(loc).Format(time.DateOnly) < date {
+		d = d.Add(15 * time.Minute)
+	}
+	return d
+}
+
+// anyApproximate: algún número de la respuesta sale de un importador.
+func anyApproximate(r *issuesv1.GetFlowMetricsResponse) bool {
+	approx := issuesv1.MetricConfidence_METRIC_CONFIDENCE_APPROXIMATE
+	if r.GetSummary().GetSource().GetConfidence() == approx {
+		return true
+	}
+	for _, w := range r.GetWeeks() {
+		if w.GetSource().GetConfidence() == approx {
+			return true
+		}
+	}
+	for _, s := range r.GetStale() {
+		if s.GetConfidence() == approx {
+			return true
+		}
+	}
+	return false
 }
 
 // dayArg lee una fecha YYYY-MM-DD como las 00:00 de ese día (más addDays)
@@ -304,11 +350,14 @@ func dayArg(args map[string]any, name string, loc *time.Location, addDays int) (
 	if err != nil || s == "" {
 		return nil, err
 	}
-	d, err := time.ParseInLocation(time.DateOnly, s, loc)
+	// Los días se suman sobre la fecha y recién después se ubica en loc: en
+	// un día sin 00:00 (cambio de horario) empieza en la primera hora que
+	// existe, y el siguiente vuelve a las 00:00.
+	date, err := time.Parse(time.DateOnly, s)
 	if err != nil {
 		return nil, invalid("%s: fecha como 2026-06-18", name)
 	}
-	d = d.AddDate(0, 0, addDays)
+	d := dayStart(date.AddDate(0, 0, addDays).Format(time.DateOnly), loc)
 	return &d, nil
 }
 

@@ -52,7 +52,8 @@ version: 1
 #
 # Issue 030 (MCP, fase 1): /mcp expone solo lecturas. list_projects,
 # list_issues y get_issue se declaran acá (nombre y descripción); next_issue,
-# que usa ListIssues con filtros fijos, en app/mcptools. Las cuatro son
+# que usa ListIssues con filtros fijos, en app/mcptools. get_flow_metrics
+# (issue 036) se declara en GetFlowMetrics. Las cinco son
 # herramientas propias (app/mcptools): toman la clave del proyecto, componen
 # varias lecturas y cada una entra al mux con la política de SU ruta de esta
 # tabla. Ninguna ruta de escritura lleva `mcp:` (lo fija un test).
@@ -102,9 +103,15 @@ routes:
     roles: [allowlist, issues:read]
 
   # Issue 036: métricas de flujo. Nombre de la herramienta acordado con la
-  # sesión plantillas (2026-11-13); la implementa app/mcptools/flow.go.
+  # sesión plantillas (2026-11-13); la implementa app/mcptools/flow.go. Cada
+  # llamada recalcula la historia del proyecto: bucket propio y más tiempo
+  # (hasta 104 semanas).
   issues.v1.IssueService/GetFlowMetrics:
     roles: [allowlist, issues:read]
+    timeout: 20s
+    rate_limit:
+      per_minute: 60
+      burst: 10
     mcp:
       tool: get_flow_metrics
       description: "Métricas de flujo de un proyecto (project: clave) por semana: lead y cycle time (mediana y p85, en días), cerrados (valor y otros), empezados, en curso y estancados. from/to: YYYY-MM-DD (12 semanas por defecto). Cada número dice si es registrado en vivo o histórico aproximado."

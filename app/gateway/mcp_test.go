@@ -222,7 +222,7 @@ func newMCPEnv(t *testing.T) *env {
 
 var wantTools = []string{"get_flow_metrics", "get_issue", "list_issues", "list_projects", "next_issue"}
 
-// CU-030-1: las cuatro herramientas, todas de solo lectura y ninguna de escritura.
+// CU-030-1 y CU-036-10: las cinco herramientas, todas de solo lectura y ninguna de escritura.
 func TestMCPHerramientas(t *testing.T) {
 	e := newMCPEnv(t)
 	sess := e.mcpSession(e.creds.header("u-1", "issues:read"))

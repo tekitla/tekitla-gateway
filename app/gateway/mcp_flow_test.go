@@ -68,6 +68,8 @@ type flowResp struct {
 	}
 	Weeks []struct {
 		Week     string
+		End      string
+		Partial  bool
 		LeadTime flowDur `json:"lead_time"`
 		Source   string
 	}
@@ -114,7 +116,8 @@ func TestMCPGetFlowMetrics(t *testing.T) {
 		t.Errorf("fuente del resumen = %q %v", s.Source, s.Events)
 	}
 	if len(out.Weeks) != 2 || out.Weeks[0].Week != "2026-09-07" || out.Weeks[0].Source != "sin datos" || out.Weeks[0].LeadTime.MedianDays != nil ||
-		out.Weeks[1].Week != "2026-09-14" || out.Weeks[1].Source != "histórico aproximado" {
+		out.Weeks[1].Week != "2026-09-14" || out.Weeks[1].Source != "histórico aproximado" ||
+		out.Weeks[0].End != "2026-09-13" || out.Weeks[0].Partial || out.Weeks[1].End != "2026-09-20" {
 		t.Errorf("semanas = %+v", out.Weeks)
 	}
 	if len(out.Stale) != 1 || out.Stale[0].Key != "RND-236" || out.Stale[0].Status != "En curso" || out.Stale[0].DaysIdle != 26 || out.StaleTotal != 2 {
