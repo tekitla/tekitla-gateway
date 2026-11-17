@@ -246,12 +246,12 @@ func flowResult(projectKey string, r *issuesv1.GetFlowMetricsResponse, n *names,
 	}
 
 	out.Notes = append(out.Notes,
-		"Lead time: de creado a hecho. Cycle time: de la primera vez en curso a hecho. Mediana y percentil 85 de los que terminaron esa semana.",
+		"Lead time: de creado a hecho. Cycle time: de la primera vez en curso a hecho. Mediana y percentil 85 de los que terminaron esa semana. Los creados ya en una columna de hecho cuentan como cerrados pero no entran en lead ni cycle time.",
 		"Métricas del sistema, no de personas: sirven para ver dónde se atora el trabajo.")
 	if len(r.GetValueLabelIds()) == 0 {
 		out.Notes = append(out.Notes, "El proyecto no tiene etiquetas de valor: todo lo hecho cuenta como closed_value.")
 	} else {
-		out.Notes = append(out.Notes, "closed_value: hechos con alguna etiqueta de value_labels; closed_other, el resto. Lead y cycle time son de todo lo hecho.")
+		out.Notes = append(out.Notes, "closed_value: hechos con alguna etiqueta de value_labels; closed_other, el resto. Lead y cycle time no distinguen etiquetas.")
 	}
 	if anyApproximate(r) {
 		out.Notes = append(out.Notes, "«histórico aproximado»: hay fechas reconstruidas de un importador (commits o fechas escritas en el archivo); los estados se cambiaban a mano y a veces tarde.")
