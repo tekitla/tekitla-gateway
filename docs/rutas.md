@@ -18,7 +18,7 @@
 ## Rutas de Tekitla
 
 Las 21 de `issues.v1.IssueService` (tekitla-protos `v0.8.0`: rebanada 1, 3a e
-issues 011, 013, 025 y 036; el 012 suma parámetros a `ListIssues`), con
+issues 011, 013, 025, 033 y 036; el 012 suma parámetros a `ListIssues`), con
 `roles: [allowlist, issues:read]` las lecturas y `[allowlist, issues:write]`
 las escrituras (sesión de Firebase en la allowlist **o** un token `tka_` con
 ese scope; docs/auth.md), y las 6 de `issues.v1.ActorService` (issue 025),
@@ -168,6 +168,11 @@ Formato único para todo lo que responde el gateway:
   | `ALREADY_EXISTS` | `STATUS_NAME_TAKEN` | nombre de estado repetido en el proyecto |
   | `ALREADY_EXISTS` | `LABEL_NAME_TAKEN` | nombre de etiqueta repetido en el proyecto |
   | `ALREADY_EXISTS` | `PROJECT_KEY_TAKEN` | key de proyecto repetida en el espacio |
+  | `INVALID_ARGUMENT` | `STATUS_NOT_IN_PROJECT` | `CreateIssue` con un `status_id` que no es del proyecto (033) |
+  | `INVALID_ARGUMENT` | `CANCELED_STATUS` | `CreateIssue` con un `status_id` de categoría `CANCELED`: descartar es `DiscardIssue`, con motivo (033) |
+  | `INVALID_ARGUMENT` | `INVALID_PERIOD`, `PERIOD_TOO_LONG` | `GetFlowMetrics` con `from` no anterior a `to`, fechas fuera de rango o más de 104 semanas (036) |
+  | `INVALID_ARGUMENT` | `INVALID_TIME_ZONE`, `UNKNOWN_LABEL` | `GetFlowMetrics` con una zona IANA desconocida o una etiqueta que no es del proyecto (036) |
+  | `INVALID_ARGUMENT` | `INVALID_STALE_AFTER_DAYS`, `INVALID_STALE_LIMIT` | `GetFlowMetrics` con `stale_after_days` fuera de 1 a 365 o `stale_limit` fuera de 1 a 100 (036) |
 - Todo 5xx (`INTERNAL`, `UNKNOWN`, `UNAVAILABLE`, `DEADLINE_EXCEEDED`...)
   sale con un mensaje **genérico**; el detalle real queda en el log con el
   mismo `request_id`. Nunca stack traces ni mensajes internos.

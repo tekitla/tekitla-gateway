@@ -30,7 +30,12 @@ func TestCreateIssueConStatusID(t *testing.T) {
 		t.Errorf("request a CreateIssue = %v", &req)
 	}
 
+	// Un campo fuera del contrato lo corta el gateway: no llega al servicio.
+	before := len(e.up.requests())
 	if w := e.do(http.MethodPost, "/v1/projects/p1/issues", `{"title":"x","columna":"hecho"}`, "Authorization", bearer); w.Code != http.StatusBadRequest {
 		t.Errorf("POST con un campo desconocido = %d, esperaba 400", w.Code)
+	}
+	if after := len(e.up.requests()); after != before {
+		t.Errorf("un campo desconocido llegó al servicio (%d → %d llamadas)", before, after)
 	}
 }
