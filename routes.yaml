@@ -14,8 +14,8 @@
 #
 # Clave: <paquete>.<Servicio>/<Método> (el nombre gRPC completo).
 # Cada entrada declara EXACTAMENTE una de:
-#   public: true          sin credenciales (si llega una válida, se usa para
-#                         identidad y rate limit; una inválida se ignora)
+#   public: true          sin credenciales: la que llegue se ignora (no da
+#                         identidad ni elige el bucket; issue 009)
 #   roles: [a, b]         hace falta UNO de esos roles (claim AUTH_ROLES_CLAIM del token)
 #   deny: true            declarada pero cerrada (404), p. ej. un RPC interno
 # Opcionales (pisan `defaults`):
@@ -63,7 +63,7 @@ version: 1
 # lectura por token (SharedProjectService) es lo ÚNICO público además de
 # /healthz y /readyz: POST con el token en el cuerpo (el access log registra
 # el path, nunca el cuerpo), bucket propio por IP y más estricto que el de
-# las lecturas autenticadas. El servicio no usa la identidad aunque llegue.
+# las lecturas autenticadas. El gateway no lee credenciales en estas rutas.
 # Un `tks_` nunca es una credencial: como Bearer en otra ruta, 401.
 
 defaults:

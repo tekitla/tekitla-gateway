@@ -22,8 +22,8 @@ issues 011, 013, 025, 033 y 036; el 012 suma parámetros a `ListIssues`), con
 `roles: [allowlist, issues:read]` las lecturas y `[allowlist, issues:write]`
 las escrituras (sesión de Firebase en la allowlist **o** un token `tka_` con
 ese scope; docs/auth.md), y las 6 de `issues.v1.ActorService` (issue 025),
-solo con `allowlist`, y las 6 de los enlaces de solo lectura (issue 009,
-abajo). `ImportIssue` e `ImportIssueEvents` (`/v1/admin/...`)
+solo con `allowlist`. Los enlaces de solo lectura (issue 009, abajo)
+suman 3 rutas de gestión, solo con `allowlist`, y 3 públicas. `ImportIssue` e `ImportIssueEvents` (`/v1/admin/...`)
 están declaradas con `deny: true`: no se exponen (el importador va directo
 por gRPC). Lecturas: bucket global (600/min, ráfaga
 100), salvo `ListIssues`. Escrituras: body ≤ 64 KiB (`UpdateIssue`,
@@ -77,8 +77,10 @@ por gRPC). Lecturas: bucket global (600/min, ráfaga
   registra el path pero nunca el cuerpo. Body de 1 KiB como máximo, timeout
   de 5 s y bucket propio **por IP**, más estricto que las lecturas
   autenticadas (la IP sale de `X-Forwarded-For` según `TRUSTED_PROXY_HOPS`:
-  en Coolify, la que agrega Traefik). Si llega una credencial válida, el
-  gateway la usa para el bucket, pero el servicio no lee la identidad. Token
+  en Coolify, la que agrega Traefik; una IPv6 cuenta por su /64). El gateway
+  **no lee ninguna credencial** en estas rutas: ni la identidad llega al
+  servicio ni elige el bucket (con una cuenta por request, el límite sería
+  por cuenta y no por IP). Token
   mal formado, desconocido, vencido o revocado: `404` con el cuerpo genérico.
 - **Un `tks_` nunca es una credencial:** como `Authorization: Bearer` en
   cualquier otra ruta da `401` (no es un ID token ni un `tka_`).

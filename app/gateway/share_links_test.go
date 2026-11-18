@@ -2,6 +2,7 @@ package gateway_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -27,12 +28,19 @@ const shareToken = "tks_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 func TestEnlace_LecturaPublicaSinCredencial(t *testing.T) {
 	e := newEnv(t, nil)
 	body := `{"token":"` + shareToken + `"}`
-	for _, path := range []string{"/v1/shared/project:get", "/v1/shared/issues:list", "/v1/shared/issues:get"} {
+	for path, rpc := range map[string]string{
+		"/v1/shared/project:get": "GetSharedProject",
+		"/v1/shared/issues:list": "ListSharedIssues",
+		"/v1/shared/issues:get":  "GetSharedIssue",
+	} {
 		w := e.do(http.MethodPost, path, body)
 		if w.Code != http.StatusOK {
 			t.Fatalf("POST %s sin credencial = %d (%s)", path, w.Code, w.Body.String())
 		}
-		_, md, _ := e.up.last()
+		method, md, _ := e.up.last()
+		if method != "/issues.v1.SharedProjectService/"+rpc {
+			t.Errorf("POST %s llegó a %s, esperaba %s", path, method, rpc)
+		}
 		for _, k := range []string{"x-user-id", "x-agent-id", "x-roles"} {
 			if v := md.Get(k); len(v) != 0 {
 				t.Errorf("POST %s: %s = %v, esperaba vacío", path, k, v)
@@ -113,7 +121,13 @@ func TestEnlace_RateLimitPropioYMasEstricto(t *testing.T) {
 	e := newEnv(t, nil)
 	body := `{"token":"` + shareToken + `"}`
 	pol := e.table.Policy("issues.v1.SharedProjectService/GetSharedProject")
-	limited := 0
+	list := e.table.Policy("issues.v1.IssueService/ListIssues")
+	if pol.RateLimit.Burst >= list.RateLimit.Burst || pol.RateLimit.Burst >= e.table.Defaults.RateLimit.Burst ||
+		pol.RateLimit.PerMinute >= list.RateLimit.PerMinute {
+		t.Fatalf("la ruta pública (%+v) no es más estricta que ListIssues (%+v) y el global (%+v)",
+			pol.RateLimit, list.RateLimit, e.table.Defaults.RateLimit)
+	}
+	limited := -1
 	for i := 0; i < pol.RateLimit.Burst+1; i++ {
 		w := e.do(http.MethodPost, "/v1/shared/project:get", body)
 		if w.Code == http.StatusTooManyRequests {
@@ -123,6 +137,9 @@ func TestEnlace_RateLimitPropioYMasEstricto(t *testing.T) {
 			}
 			break
 		}
+	}
+	if limited == -1 {
+		t.Fatalf("ningún 429 en %d requests: la ruta pública no tiene rate limit", pol.RateLimit.Burst+1)
 	}
 	if limited != pol.RateLimit.Burst {
 		t.Fatalf("el 429 llegó en el request %d, esperaba en el %d", limited+1, pol.RateLimit.Burst+1)
@@ -190,5 +207,49 @@ func TestEnlace_JSONSinDatosPrivados(t *testing.T) {
 		if strings.Contains(w.Body.String(), bad) {
 			t.Errorf("el JSON público lleva %q: %s", bad, w.Body.String())
 		}
+	}
+}
+
+// Una ruta pública no lee la credencial (issue 009, code review): ni llega la
+// identidad al servicio ni elige el bucket. Con N cuentas válidas el límite
+// sigue siendo el de la IP.
+func TestEnlace_CredencialIgnoradaEnRutaPublica(t *testing.T) {
+	e := newEnv(t, nil)
+	body := `{"token":"` + shareToken + `"}`
+	pol := e.table.Policy("issues.v1.SharedProjectService/GetSharedProject")
+
+	n, v := e.creds.header("duena", auth.AllowlistRole)
+	if w := e.do(http.MethodPost, "/v1/shared/project:get", body, n, v); w.Code != http.StatusOK {
+		t.Fatalf("con sesión = %d", w.Code)
+	}
+	_, md, _ := e.up.last()
+	for _, k := range []string{"x-user-id", "x-agent-id", "x-roles", "x-auth-type"} {
+		if got := md.Get(k); len(got) != 0 {
+			t.Errorf("%s = %v en una ruta pública, esperaba vacío", k, got)
+		}
+	}
+	tok := e.creds.tokens.add("persona-1", "agente-1", auth.ScopeIssuesRead)
+	if w := e.do(http.MethodPost, "/v1/shared/project:get", body, "Authorization", "Bearer "+tok); w.Code != http.StatusOK {
+		t.Fatalf("con tka_ = %d", w.Code)
+	}
+	if _, md, _ := e.up.last(); len(md.Get("x-user-id")) != 0 || len(md.Get("x-agent-id")) != 0 {
+		t.Errorf("un tka_ propagó identidad en una ruta pública: %v", md)
+	}
+	if e.creds.tokens.count() != 0 {
+		t.Errorf("la ruta pública resolvió el tka_ (%d veces)", e.creds.tokens.count())
+	}
+
+	// Ya se gastaron 2 del bucket de la IP: con una cuenta nueva por request,
+	// el 429 llega igual al pasar la ráfaga.
+	got429 := false
+	for i := 0; i < pol.RateLimit.Burst; i++ {
+		n, v := e.creds.header(fmt.Sprintf("cuenta-%d", i))
+		if w := e.do(http.MethodPost, "/v1/shared/project:get", body, n, v); w.Code == http.StatusTooManyRequests {
+			got429 = true
+			break
+		}
+	}
+	if !got429 {
+		t.Errorf("con una cuenta distinta por request no hubo 429: cada cuenta tiene su bucket")
 	}
 }

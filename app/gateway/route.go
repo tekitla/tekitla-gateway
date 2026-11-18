@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"mime"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -62,13 +63,17 @@ func (g *gw) routeMiddleware(next runtime.HandlerFunc) runtime.HandlerFunc {
 			return
 		}
 
-		// 3. Autenticación. En rutas públicas una credencial válida se usa
-		//    (identidad para logs/servicio) y una inválida se ignora.
-		id, err := g.auth.Authenticate(r)
+		// 3. Autenticación. Las rutas públicas no leen ninguna credencial
+		//    (issue 009): ni la identidad llega al servicio ni elige el bucket
+		//    del rate limit. Si una cuenta cualquiera de Firebase cambiara la
+		//    clave de IP a usuario, con N cuentas el límite por IP se
+		//    multiplicaría por N.
+		var err error
+		if !pol.Public {
+			info.Identity, err = g.auth.Authenticate(r)
+		}
 		switch {
 		case err == nil:
-			info.Identity = id
-		case pol.Public:
 		case errors.Is(err, auth.ErrUnavailable):
 			g.log.WarnContext(ctx, "auth no disponible", slog.String("request_id", info.RequestID), slog.String("error", err.Error()))
 			apierror.Write(w, r, http.StatusServiceUnavailable, "UNAVAILABLE", "no se pudo verificar la credencial; reintentá en unos segundos")
@@ -91,7 +96,7 @@ func (g *gw) routeMiddleware(next runtime.HandlerFunc) runtime.HandlerFunc {
 
 		// 5. Rate limit: por usuario si hay identidad; si no, por IP. Las rutas
 		//    con rate_limit propio tienen su bucket; el resto comparte uno.
-		key := "ip:" + info.ClientIP
+		key := ipKey(info.ClientIP)
 		if info.Identity != nil {
 			// También con un token de agente: el bucket es de la persona, así
 			// crear más agentes no multiplica su cuota.
@@ -152,4 +157,16 @@ func ceilSeconds(d time.Duration) int {
 
 func notFound(w http.ResponseWriter, r *http.Request) {
 	apierror.Write(w, r, http.StatusNotFound, "NOT_FOUND", "ruta no encontrada")
+}
+
+// ipKey es la clave del rate limit de un cliente sin identidad. Una IPv6 se
+// agrupa por su /64 (lo que suele tener una sola conexión): si no, quien tenga
+// un /64 podría crear una clave por request y llenar el limitador (issue 009,
+// las rutas públicas son las primeras que cuentan por IP).
+func ipKey(clientIP string) string {
+	ip := net.ParseIP(clientIP)
+	if ip == nil || ip.To4() != nil {
+		return "ip:" + clientIP
+	}
+	return "ip6:" + ip.Mask(net.CIDRMask(64, 128)).String() + "/64"
 }
