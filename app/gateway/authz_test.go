@@ -101,11 +101,13 @@ func TestRutasDeLaTablaExisten(t *testing.T) {
 	}
 }
 
-// TestRutasDeTekitlaExigenAllowlist (rebanadas 1 y 3a, issues 011, 013 y
-// 025): las rutas del contrato están expuestas, ninguna es pública ni se abre
-// sin el rol de la allowlist; las de IssueService aceptan además el scope de
-// token que corresponde (lecturas issues:read, escrituras issues:write) y las
-// de ActorService solo la allowlist. ImportIssue no se expone. Las
+// TestRutasDeTekitlaExigenAllowlist (rebanadas 1 y 3a, issues 011, 013, 025
+// y 009): las rutas del contrato están expuestas y ninguna se abre sin el rol
+// de la allowlist, salvo las tres de lectura por token del 009 (públicas, con
+// bucket propio más estricto que las lecturas autenticadas). Las de
+// IssueService aceptan además el scope de token que corresponde (lecturas
+// issues:read, escrituras issues:write); las de ActorService y
+// ShareLinkService, solo la allowlist. ImportIssue no se expone. Las
 // escrituras tienen un rate limit más estricto que las lecturas.
 func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 	e := newEnv(t, nil)
@@ -127,19 +129,36 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		// Issue 025: agentes y tokens.
 		"GET /v1/actors", "POST /v1/agents", "POST /v1/actors/{actor_id}:revoke",
 		"GET /v1/tokens", "POST /v1/tokens", "POST /v1/tokens/{token_id}:revoke",
+		// Issue 009: gestión de enlaces de solo lectura.
+		"GET /v1/projects/{project_id}/share-links", "POST /v1/projects/{project_id}/share-links",
+		"POST /v1/projects/{project_id}/share-links/{share_link_id}:revoke",
 	}
+	// Issue 009: lo único público (lectura por el token de un enlace).
+	wantPublic := []string{"POST /v1/shared/issues:get", "POST /v1/shared/issues:list", "POST /v1/shared/project:get"}
+	listIssues := e.table.Policy("issues.v1.IssueService/ListIssues")
 	denied := []string{"issues.v1.IssueService/ImportIssue", "issues.v1.IssueService/ImportIssueEvents"}
-	var got, gotDenied []string
+	var got, gotDenied, gotPublic []string
 	for _, b := range e.report.Bindings {
 		pol := e.table.Policy(b.Method)
 		if pol != nil && pol.Deny {
 			gotDenied = append(gotDenied, b.Method)
 			continue
 		}
+		if pol != nil && pol.Public {
+			gotPublic = append(gotPublic, b.Verb+" "+b.Template)
+			// CU-009-5: bucket propio, más estricto que el global y que el de
+			// ListIssues, con body chico.
+			if !strings.HasPrefix(b.Method, "issues.v1.SharedProjectService/") || !pol.OwnRateLimit ||
+				pol.RateLimit.PerMinute >= listIssues.RateLimit.PerMinute || pol.RateLimit.Burst >= listIssues.RateLimit.Burst ||
+				pol.MaxBodyBytes > 1024 {
+				t.Errorf("%s: pública con política %+v; esperaba solo SharedProjectService, con rate limit propio menor que %+v y body de 1 KiB", b.Method, pol, listIssues.RateLimit)
+			}
+			continue
+		}
 		got = append(got, b.Verb+" "+b.Template)
 		wantRoles := []string{auth.AllowlistRole}
 		switch {
-		case strings.HasPrefix(b.Method, "issues.v1.ActorService/"):
+		case strings.HasPrefix(b.Method, "issues.v1.ActorService/"), strings.HasPrefix(b.Method, "issues.v1.ShareLinkService/"):
 		case b.Verb == http.MethodGet:
 			wantRoles = append(wantRoles, auth.ScopeIssuesRead)
 		default:
@@ -158,6 +177,10 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 	slices.Sort(want)
 	if !slices.Equal(got, want) {
 		t.Fatalf("rutas expuestas = %v, esperaba %v", got, want)
+	}
+	slices.Sort(gotPublic)
+	if !slices.Equal(gotPublic, wantPublic) {
+		t.Fatalf("rutas públicas = %v, esperaba %v", gotPublic, wantPublic)
 	}
 	if !slices.Equal(gotDenied, denied) {
 		t.Fatalf("rutas cerradas = %v, esperaba %v", gotDenied, denied)

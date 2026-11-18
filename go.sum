@@ -45,6 +45,8 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/tekitla/tekitla-protos v0.8.0 h1:AMBFR4ustwGkqKwp1epfzjfgKkfBe+Ao0KwTE+GAgak=
 github.com/tekitla/tekitla-protos v0.8.0/go.mod h1:EwC9K/na6ImY7dEcDZZGeS15ceqVV5dnDOTnq1zXoQM=
+github.com/tekitla/tekitla-protos v0.8.1-0.20261118224026-13de7a1aac0a h1:2IoxBB65eITDU0MNyYAqfpGXvnZniPp8oBd37LFRlmk=
+github.com/tekitla/tekitla-protos v0.8.1-0.20261118224026-13de7a1aac0a/go.mod h1:EwC9K/na6ImY7dEcDZZGeS15ceqVV5dnDOTnq1zXoQM=
 github.com/yosida95/uritemplate/v3 v3.0.2 h1:Ed3Oyj9yrmi9087+NczuL5BwkIc4wvTb5zIM+UJPGz4=
 github.com/yosida95/uritemplate/v3 v3.0.2/go.mod h1:ILOh0sOhIJR3+L/8afwt/kE++YT040gmv5BQTMR2HP4=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=

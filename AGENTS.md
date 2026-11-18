@@ -4,9 +4,10 @@
 
 Entrada pública REST de Tekitla: autentica con Firebase y traduce a gRPC.
 
-Tekitla (issue 002, rebanadas 1 y 3a, e issues 011 a 013, 025, 033 y 036): expone `issues.v1.IssueService`
-e `issues.v1.ActorService` (`github.com/tekitla/tekitla-protos@v0.8.0`) del servicio `tekitla-issues`
-(`UPSTREAM_ISSUES_ADDR`, gRPC :5000). Las 27 rutas (`docs/rutas.md`) aceptan el rol `allowlist`,
+Tekitla (issue 002, rebanadas 1 y 3a, e issues 011 a 013, 025, 033, 036 y 009): expone `issues.v1.IssueService`,
+`issues.v1.ActorService`, `issues.v1.ShareLinkService` e `issues.v1.SharedProjectService`
+(`github.com/tekitla/tekitla-protos`, pseudo-versión de la rama del 009 hasta `v0.10.0`) del servicio `tekitla-issues`
+(`UPSTREAM_ISSUES_ADDR`, gRPC :5000). Las 30 rutas autenticadas (`docs/rutas.md`) aceptan el rol `allowlist`,
 que **no** sale del token: lo otorga `auth.EmailAllowlist` solo a los emails
 verificados de `AUTH_ALLOWED_EMAILS` (vacía = nadie entra). Las de
 `IssueService` aceptan además un token de Tekitla (`Bearer tka_…`, issue 025,
@@ -14,8 +15,12 @@ ADR 0009) con `issues:read` (lecturas) o `issues:write` (escrituras): lo
 resuelve `tekitla-issues` (`TokenAuthService.ResolveToken`, interno) y el
 gateway lo guarda en caché 60 s como máximo; propaga `x-user-id` = la persona
 dueña y `x-agent-id` = el agente. Las de `ActorService` (agentes y tokens)
-piden solo `allowlist`. `ImportIssue` e `ImportIssueEvents` están en `deny`. Nada público salvo
-`/healthz` y `/readyz`.
+piden solo `allowlist`, igual que las de `ShareLinkService` (gestión de enlaces de
+solo lectura, issue 009). `ImportIssue` e `ImportIssueEvents` están en `deny`. Nada
+público salvo `/healthz`, `/readyz` y las tres de `SharedProjectService` (lectura por
+el token `tks_` de un enlace, en el cuerpo de un `POST`; bucket propio por IP, más
+estricto que las lecturas autenticadas). Un `tks_` como Bearer en cualquier otra
+ruta es `401`.
 
 `/mcp` (issue 030, opción `mcp` de la plantilla): cinco herramientas de solo
 lectura, `list_projects`, `list_issues`, `get_issue`, `next_issue` y
@@ -77,7 +82,7 @@ Detalle: `docs/rutas.md`; auth: `docs/auth.md`.
 
 ## Repo de protos
 
-`github.com/tekitla/tekitla-protos` (hoy `v0.8.0`): el handler sale de
+`github.com/tekitla/tekitla-protos` (hoy una pseudo-versión de la rama del 009; pasa a `v0.10.0` antes del merge): el handler sale de
 `<módulo>/gen/go/issues/v1` (`app/upstream/registry.go`) y el OpenAPI de
 `<módulo>/gen/openapi` (`cli/main.go`). Ya no hay `proto/`, `gen/` ni `buf.*`
 locales. Versión nueva: `go get github.com/tekitla/tekitla-protos@<tag>`. Sin
