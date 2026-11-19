@@ -29,6 +29,18 @@ var Services = []Service{
 		Register:    issuesv1.RegisterActorServiceHandler,
 	},
 	{
+		// Enlaces de solo lectura (issue 009): gestión, autenticada.
+		Name:        "issues",
+		GRPCService: "issues.v1.ShareLinkService",
+		Register:    issuesv1.RegisterShareLinkServiceHandler,
+	},
+	{
+		// Enlaces de solo lectura (issue 009): lectura pública por token.
+		Name:        "issues",
+		GRPCService: "issues.v1.SharedProjectService",
+		Register:    issuesv1.RegisterSharedProjectServiceHandler,
+	},
+	{
 		// Sesiones de agentes (issue 026): mismo upstream.
 		Name:        "issues",
 		GRPCService: "issues.v1.AgentSessionService",

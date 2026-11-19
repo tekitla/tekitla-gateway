@@ -14,8 +14,8 @@
 #
 # Clave: <paquete>.<Servicio>/<Método> (el nombre gRPC completo).
 # Cada entrada declara EXACTAMENTE una de:
-#   public: true          sin credenciales (si llega una válida, se usa para
-#                         identidad y rate limit; una inválida se ignora)
+#   public: true          sin credenciales: la que llegue se ignora (no da
+#                         identidad ni elige el bucket; issue 009)
 #   roles: [a, b]         hace falta UNO de esos roles (claim AUTH_ROLES_CLAIM del token)
 #   deny: true            declarada pero cerrada (404), p. ej. un RPC interno
 # Opcionales (pisan `defaults`):
@@ -57,6 +57,14 @@ version: 1
 # herramientas propias (app/mcptools): toman la clave del proyecto, componen
 # varias lecturas y cada una entra al mux con la política de SU ruta de esta
 # tabla. Ninguna ruta de escritura lleva `mcp:` (lo fija un test).
+#
+# Issue 009: enlaces de solo lectura. La gestión (ShareLinkService) pide solo
+# `allowlist`, como ActorService: un token tka_ no crea ni revoca enlaces. La
+# lectura por token (SharedProjectService) es lo ÚNICO público además de
+# /healthz y /readyz: POST con el token en el cuerpo (el access log registra
+# el path, nunca el cuerpo), bucket propio por IP y más estricto que el de
+# las lecturas autenticadas. El gateway no lee credenciales en estas rutas.
+# Un `tks_` nunca es una credencial: como Bearer en otra ruta, 401.
 #
 # Issue 026: sesiones de agentes. ReportSessions la usa solo el recolector
 # local de herdr con un token de persona con `sessions:write` (no la sesión de
@@ -288,6 +296,56 @@ routes:
     rate_limit:
       per_minute: 30
       burst: 10
+
+  # --- Issue 009: enlaces de solo lectura ------------------------------------
+  # Gestión: solo la sesión del panel (allowlist), nunca un token tka_.
+  issues.v1.ShareLinkService/ListShareLinks:
+    roles: [allowlist]
+
+  # Cada enlace es una credencial de lectura nueva: bucket estricto.
+  issues.v1.ShareLinkService/CreateShareLink:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 4096
+    rate_limit:
+      per_minute: 10
+      burst: 5
+
+  issues.v1.ShareLinkService/RevokeShareLink:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 1024
+    rate_limit:
+      per_minute: 30
+      burst: 10
+
+  # Lectura pública por token (sin credenciales). Bucket por IP (la que pone
+  # Traefik en X-Forwarded-For, TRUSTED_PROXY_HOPS=1). Abrir el panel cuesta
+  # un GetSharedProject y de 1 a 3 ListSharedIssues (100 por página). Con 256
+  # bits, adivinar un token es inviable: el límite es contra abuso y costo.
+  issues.v1.SharedProjectService/GetSharedProject:
+    public: true
+    timeout: 5s
+    max_body_bytes: 1024
+    rate_limit:
+      per_minute: 30
+      burst: 10
+
+  issues.v1.SharedProjectService/ListSharedIssues:
+    public: true
+    timeout: 5s
+    max_body_bytes: 1024
+    rate_limit:
+      per_minute: 60
+      burst: 20
+
+  issues.v1.SharedProjectService/GetSharedIssue:
+    public: true
+    timeout: 5s
+    max_body_bytes: 1024
+    rate_limit:
+      per_minute: 60
+      burst: 20
 
   # --- Sesiones de agentes (issue 026) ---------------------------------------
   # Solo el recolector (token de persona con sessions:write). Por máquina: un

@@ -4,9 +4,10 @@
 
 Entrada pública REST de Tekitla: autentica con Firebase y traduce a gRPC.
 
-Tekitla (issue 002, rebanadas 1 y 3a, e issues 011 a 013, 025, 026, 033 y 036): expone `issues.v1.IssueService`,
-`issues.v1.ActorService` e `issues.v1.AgentSessionService` (`github.com/tekitla/tekitla-protos@v0.10.0`) del servicio `tekitla-issues`
-(`UPSTREAM_ISSUES_ADDR`, gRPC :5000). Las rutas (`docs/rutas.md`) aceptan el rol `allowlist`,
+Tekitla (issue 002, rebanadas 1 y 3a, e issues 011 a 013, 025, 026, 033, 036 y 009): expone `issues.v1.IssueService`,
+`issues.v1.ActorService`, `issues.v1.ShareLinkService`, `issues.v1.SharedProjectService`
+e `issues.v1.AgentSessionService` (`github.com/tekitla/tekitla-protos@v0.10.0`) del servicio `tekitla-issues`
+(`UPSTREAM_ISSUES_ADDR`, gRPC :5000). Las rutas autenticadas (`docs/rutas.md`) aceptan el rol `allowlist`,
 que **no** sale del token: lo otorga `auth.EmailAllowlist` solo a los emails
 verificados de `AUTH_ALLOWED_EMAILS` (vacía = nadie entra). Las de
 `IssueService` aceptan además un token de Tekitla (`Bearer tka_…`, issue 025,
@@ -14,11 +15,15 @@ ADR 0009) con `issues:read` (lecturas) o `issues:write` (escrituras): lo
 resuelve `tekitla-issues` (`TokenAuthService.ResolveToken`, interno) y el
 gateway lo guarda en caché 60 s como máximo; propaga `x-user-id` = la persona
 dueña y `x-agent-id` = el agente. Las de `ActorService` (agentes y tokens)
-piden solo `allowlist`. Sesiones de agentes (issue 026): `ListAgentSessions`
-es una lectura más; `ReportSessions` pide **solo** `sessions:write` (el
-recolector local de herdr, con un token de persona; la sesión de Firebase no
-reporta). `ImportIssue` e `ImportIssueEvents` están en `deny`. Nada público salvo
-`/healthz` y `/readyz`.
+piden solo `allowlist`, igual que las de `ShareLinkService` (gestión de enlaces de
+solo lectura, issue 009). `ImportIssue` e `ImportIssueEvents` están en `deny`. Nada
+público salvo `/healthz`, `/readyz` y las tres de `SharedProjectService` (lectura por
+el token `tks_` de un enlace, en el cuerpo de un `POST`; bucket propio por IP, más
+estricto que las lecturas autenticadas; en ellas no se lee ninguna credencial). Un
+`tks_` como Bearer en cualquier otra ruta es `401`. Sesiones de agentes (issue
+026): `ListAgentSessions` es una lectura más; `ReportSessions` pide **solo**
+`sessions:write` (el recolector local de herdr, con un token de persona; la
+sesión de Firebase no reporta).
 
 `/mcp` (issue 030, opción `mcp` de la plantilla): seis herramientas de solo
 lectura, `list_projects`, `list_issues`, `get_issue`, `next_issue`,
@@ -69,9 +74,10 @@ Detalle: `docs/rutas.md`; auth: `docs/auth.md`.
    `roles: [...]` o `deny: true` (+ `rate_limit` estricto en login, registro,
    recuperar clave, búsquedas). En Tekitla: `roles: [allowlist, issues:read]`
    (lecturas) o `[allowlist, issues:write]` (escrituras); agentes y tokens,
-   solo `[allowlist]`. Única excepción: `ReportSessions` (issue 026), solo
-   `[sessions:write]`, sin `allowlist` (la llama el recolector de herdr, no
-   el panel).
+   solo `[allowlist]`, igual que la gestión de enlaces (009). Excepciones:
+   las tres de `SharedProjectService` son `public: true` (token `tks_` en el
+   cuerpo, 009), y `ReportSessions` (026) pide solo `[sessions:write]`, sin
+   `allowlist` (la llama el recolector de herdr, no el panel).
 4. `go test ./...`: `TestAutorizacionPorRuta` genera los casos solo
    (401/403/200; pública → 200; deny → 404; con `allowlist`, además 403 por
    email ajeno, sin verificar o rol puesto como claim). Si falla por "sin
