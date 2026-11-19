@@ -17,12 +17,13 @@
 
 ## Rutas de Tekitla
 
-Las 21 de `issues.v1.IssueService` (tekitla-protos `v0.8.0`: rebanada 1, 3a e
+Las 21 de `issues.v1.IssueService` (tekitla-protos `v0.9.0`: rebanada 1, 3a e
 issues 011, 013, 025, 033 y 036; el 012 suma parámetros a `ListIssues`), con
 `roles: [allowlist, issues:read]` las lecturas y `[allowlist, issues:write]`
 las escrituras (sesión de Firebase en la allowlist **o** un token `tka_` con
 ese scope; docs/auth.md), y las 6 de `issues.v1.ActorService` (issue 025),
-solo con `allowlist`. `ImportIssue` e `ImportIssueEvents` (`/v1/admin/...`)
+solo con `allowlist`. Los enlaces de solo lectura (issue 009, abajo)
+suman 3 rutas de gestión, solo con `allowlist`, y 3 públicas. `ImportIssue` e `ImportIssueEvents` (`/v1/admin/...`)
 están declaradas con `deny: true`: no se exponen (el importador va directo
 por gRPC). Lecturas: bucket global (600/min, ráfaga
 100), salvo `ListIssues`. Escrituras: body ≤ 64 KiB (`UpdateIssue`,
@@ -58,6 +59,33 @@ por gRPC). Lecturas: bucket global (600/min, ráfaga
 | `ListTokens` | `GET /v1/tokens` | global (solo `allowlist`) |
 | `CreateToken` | `POST /v1/tokens` | 10/min, ráfaga 5 (solo `allowlist`) |
 | `RevokeToken` | `POST /v1/tokens/{token_id}:revoke` | 30/min, ráfaga 10 (solo `allowlist`) |
+| `ListShareLinks` | `GET /v1/projects/{project_id}/share-links` | global (solo `allowlist`) |
+| `CreateShareLink` | `POST /v1/projects/{project_id}/share-links` | 10/min, ráfaga 5 (solo `allowlist`) |
+| `RevokeShareLink` | `POST /v1/projects/{project_id}/share-links/{share_link_id}:revoke` | 30/min, ráfaga 10 (solo `allowlist`) |
+| `GetSharedProject` | `POST /v1/shared/project:get` | **pública**: 30/min, ráfaga 10 por IP |
+| `ListSharedIssues` | `POST /v1/shared/issues:list` | **pública**: 60/min, ráfaga 20 por IP |
+| `GetSharedIssue` | `POST /v1/shared/issues:get` | **pública**: 60/min, ráfaga 20 por IP |
+
+### Enlaces de solo lectura (issue 009)
+
+- **Gestión** (`issues.v1.ShareLinkService`): solo la sesión del panel
+  (`allowlist`), como `ActorService`. Un token `tka_` no crea, lista ni
+  revoca enlaces (403). Solo el dueño del proyecto: lo verifica el servicio.
+- **Lectura por token** (`issues.v1.SharedProjectService`): las únicas rutas
+  públicas, además de `/healthz` y `/readyz`. Son `POST` con
+  `{"token":"tks_…"}` en el cuerpo, aunque solo leen, porque el access log
+  registra el path pero nunca el cuerpo. Body de 1 KiB como máximo, timeout
+  de 5 s y bucket propio **por IP**, más estricto que las lecturas
+  autenticadas (la IP sale de `X-Forwarded-For` según `TRUSTED_PROXY_HOPS`:
+  en Coolify, la que agrega Traefik; una IPv6 cuenta por su /64). El gateway
+  **no lee ninguna credencial** en estas rutas: ni la identidad llega al
+  servicio ni elige el bucket (con una cuenta por request, el límite sería
+  por cuenta y no por IP). Token
+  mal formado, desconocido, vencido o revocado: `404` con el cuerpo genérico.
+- **Un `tks_` nunca es una credencial:** como `Authorization: Bearer` en
+  cualquier otra ruta da `401` (no es un ID token ni un `tka_`).
+- Tests: `app/gateway/share_links_test.go` y los casos que
+  `TestAutorizacionPorRuta` genera desde `routes.yaml`.
 
 Búsqueda, filtros y orden de `ListIssues` (issue 012) van en la query string,
 con los nombres del `.proto`. Las listas repiten el parámetro y los enums
