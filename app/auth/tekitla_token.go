@@ -30,10 +30,13 @@ const tokenLen = len(TokenPrefix) + 43
 const (
 	ScopeIssuesRead  = "issues:read"
 	ScopeIssuesWrite = "issues:write"
+	// ScopeSessionsWrite: reportar sesiones de agentes (issue 026, el
+	// recolector de herdr). No lee ni cambia issues.
+	ScopeSessionsWrite = "sessions:write"
 )
 
 // TokenScopes son todos los scopes de token.
-var TokenScopes = []string{ScopeIssuesRead, ScopeIssuesWrite}
+var TokenScopes = []string{ScopeIssuesRead, ScopeIssuesWrite, ScopeSessionsWrite}
 
 // TokenCacheTTL es lo máximo que se guarda un resultado: es la demora de una
 // revocación (ADR 0009).

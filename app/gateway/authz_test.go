@@ -127,6 +127,8 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		// Issue 025: agentes y tokens.
 		"GET /v1/actors", "POST /v1/agents", "POST /v1/actors/{actor_id}:revoke",
 		"GET /v1/tokens", "POST /v1/tokens", "POST /v1/tokens/{token_id}:revoke",
+		// Issue 026: sesiones de agentes.
+		"GET /v1/agentSessions", "POST /v1/agentSessions:report",
 	}
 	denied := []string{"issues.v1.IssueService/ImportIssue", "issues.v1.IssueService/ImportIssueEvents"}
 	var got, gotDenied []string
@@ -140,6 +142,10 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		wantRoles := []string{auth.AllowlistRole}
 		switch {
 		case strings.HasPrefix(b.Method, "issues.v1.ActorService/"):
+		case b.Method == "issues.v1.AgentSessionService/ReportSessions":
+			// Solo el recolector: un token de persona con sessions:write. La
+			// sesión de Firebase (allowlist) no reporta.
+			wantRoles = []string{auth.ScopeSessionsWrite}
 		case b.Verb == http.MethodGet:
 			wantRoles = append(wantRoles, auth.ScopeIssuesRead)
 		default:

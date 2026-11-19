@@ -147,3 +147,37 @@ func TestAuditoriaDeTokens(t *testing.T) {
 		}
 	}
 }
+
+// CU-026-8: ReportSessions pide sessions:write. Sin ese scope (aunque tenga
+// los de issues) o con la sesión de Firebase, 403. Y sessions:write no da
+// lectura ni escritura de issues.
+func TestReportSessionsPideSessionsWrite(t *testing.T) {
+	e := newEnv(t, nil)
+	report := func(n, v string) int {
+		return e.do(http.MethodPost, "/v1/agentSessions:report", `{"source":"SESSION_SOURCE_HERDR","machine":"PC-01"}`, n, v).Code
+	}
+
+	issues := e.creds.tokens.add("persona-1", "", auth.ScopeIssuesRead, auth.ScopeIssuesWrite)
+	if c := report("Authorization", "Bearer "+issues); c != http.StatusForbidden {
+		t.Errorf("con issues:read+write = %d, esperaba 403", c)
+	}
+	if c := report(e.creds.withEmail("u-panel", testAllowedEmail, true)); c != http.StatusForbidden {
+		t.Errorf("con la sesión de Firebase (allowlist) = %d, esperaba 403", c)
+	}
+
+	sessions := e.creds.tokens.add("persona-1", "", auth.ScopeSessionsWrite)
+	if c := report("Authorization", "Bearer "+sessions); c != http.StatusOK {
+		t.Fatalf("con sessions:write = %d, esperaba 200", c)
+	}
+	_, md, _ := e.up.last()
+	if got := md.Get("x-roles"); len(got) != 1 || got[0] != auth.ScopeSessionsWrite {
+		t.Errorf("x-roles = %v", got)
+	}
+	if w := e.do(http.MethodGet, "/v1/projects", "", "Authorization", "Bearer "+sessions); w.Code != http.StatusForbidden {
+		t.Errorf("GET /v1/projects con solo sessions:write = %d, esperaba 403", w.Code)
+	}
+	// Leer sesiones es una lectura más.
+	if w := e.do(http.MethodGet, "/v1/agentSessions", "", "Authorization", "Bearer "+issues); w.Code != http.StatusOK {
+		t.Errorf("GET /v1/agentSessions con issues:read = %d, esperaba 200", w.Code)
+	}
+}

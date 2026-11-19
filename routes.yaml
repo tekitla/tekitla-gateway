@@ -57,6 +57,12 @@ version: 1
 # herramientas propias (app/mcptools): toman la clave del proyecto, componen
 # varias lecturas y cada una entra al mux con la política de SU ruta de esta
 # tabla. Ninguna ruta de escritura lleva `mcp:` (lo fija un test).
+#
+# Issue 026: sesiones de agentes. ReportSessions la usa solo el recolector
+# local de herdr con un token de persona con `sessions:write` (no la sesión de
+# Firebase: el panel no reporta). ListAgentSessions es una lectura más
+# (`allowlist` o `issues:read`) y la herramienta MCP list_agent_sessions
+# (app/mcptools/sessions.go).
 
 defaults:
   timeout: 10s
@@ -282,3 +288,18 @@ routes:
     rate_limit:
       per_minute: 30
       burst: 10
+
+  # --- Sesiones de agentes (issue 026) ---------------------------------------
+  # Solo el recolector (token de persona con sessions:write). Un latido cada 2
+  # min por máquina y un reporte por cambio (lectura cada 15 s): 30/min por
+  # persona alcanza para varias máquinas. Hasta 200 sesiones por reporte.
+  issues.v1.AgentSessionService/ReportSessions:
+    roles: [sessions:write]
+    timeout: 5s
+    max_body_bytes: 524288
+    rate_limit:
+      per_minute: 30
+      burst: 10
+
+  issues.v1.AgentSessionService/ListAgentSessions:
+    roles: [allowlist, issues:read]

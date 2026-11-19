@@ -72,6 +72,8 @@ func (t *TokenAuth) ResolveToken(ctx context.Context, token string) (*auth.Token
 			out.Scopes = append(out.Scopes, auth.ScopeIssuesRead)
 		case issuesv1.TokenScope_TOKEN_SCOPE_ISSUES_WRITE:
 			out.Scopes = append(out.Scopes, auth.ScopeIssuesWrite)
+		case issuesv1.TokenScope_TOKEN_SCOPE_SESSIONS_WRITE:
+			out.Scopes = append(out.Scopes, auth.ScopeSessionsWrite)
 		}
 	}
 	return out, nil
