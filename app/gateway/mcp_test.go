@@ -237,7 +237,7 @@ func newMCPEnv(t *testing.T) *env {
 
 var wantTools = []string{"get_flow_metrics", "get_issue", "list_agent_sessions", "list_issues", "list_projects", "next_issue"}
 
-// CU-030-1 y CU-036-10: las cinco herramientas, todas de solo lectura y ninguna de escritura.
+// CU-030-1, CU-036-10 y 026: las seis herramientas, todas de solo lectura y ninguna de escritura.
 func TestMCPHerramientas(t *testing.T) {
 	e := newMCPEnv(t)
 	sess := e.mcpSession(e.creds.header("u-1", "issues:read"))
@@ -681,11 +681,13 @@ func TestMCPListAgentSessions(t *testing.T) {
 	}
 
 	for name, args := range map[string]map[string]any{
-		"issue mal formado":      {"issue": "236"},
-		"estado desconocido":     {"status": []any{"durmiendo"}},
-		"unlinked con proyecto":  {"unlinked": true, "project": "RND"},
-		"issue de otro proyecto": {"issue": "RND-1", "project": "OTRO"},
-		"argumento desconocido":  {"machine": "PC-01"},
+		"issue mal formado":       {"issue": "236"},
+		"estado desconocido":      {"status": []any{"durmiendo"}},
+		"unlinked con proyecto":   {"unlinked": true, "project": "RND"},
+		"issue de otro proyecto":  {"issue": "RND-1", "project": "OTRO"},
+		"argumento desconocido":   {"machine": "PC-01"},
+		"terminada sin inactivas": {"status": []any{"terminada"}, "include_inactive": false},
+		"clave mal formada":       {"project": "zz!"},
 	} {
 		if res, text := e.callTool(sess, "list_agent_sessions", args); !res.IsError || !strings.Contains(text, "INVALID_ARGUMENT") {
 			t.Errorf("%s: isError=%v %s", name, res.IsError, text)

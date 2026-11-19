@@ -69,7 +69,9 @@ Detalle: `docs/rutas.md`; auth: `docs/auth.md`.
    `roles: [...]` o `deny: true` (+ `rate_limit` estricto en login, registro,
    recuperar clave, búsquedas). En Tekitla: `roles: [allowlist, issues:read]`
    (lecturas) o `[allowlist, issues:write]` (escrituras); agentes y tokens,
-   solo `[allowlist]`.
+   solo `[allowlist]`. Única excepción: `ReportSessions` (issue 026), solo
+   `[sessions:write]`, sin `allowlist` (la llama el recolector de herdr, no
+   el panel).
 4. `go test ./...`: `TestAutorizacionPorRuta` genera los casos solo
    (401/403/200; pública → 200; deny → 404; con `allowlist`, además 403 por
    email ajeno, sin verificar o rol puesto como claim). Si falla por "sin

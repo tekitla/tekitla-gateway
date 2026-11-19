@@ -290,9 +290,11 @@ routes:
       burst: 10
 
   # --- Sesiones de agentes (issue 026) ---------------------------------------
-  # Solo el recolector (token de persona con sessions:write). Un latido cada 2
-  # min por máquina y un reporte por cambio (lectura cada 15 s): 30/min por
-  # persona alcanza para varias máquinas. Hasta 200 sesiones por reporte.
+  # Solo el recolector (token de persona con sessions:write). Por máquina: un
+  # latido cada 2 min más un reporte por cambio (lee cada 15 s, así que 4/min
+  # como máximo). El bucket es por persona: 30/min con ráfaga de 10 alcanza
+  # para unas 7 máquinas cambiando sin parar; con más, subirlo. Hasta 200
+  # sesiones por reporte.
   issues.v1.AgentSessionService/ReportSessions:
     roles: [sessions:write]
     timeout: 5s

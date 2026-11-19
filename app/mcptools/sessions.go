@@ -3,6 +3,7 @@ package mcptools
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	issuesv1 "github.com/tekitla/tekitla-protos/gen/go/issues/v1"
@@ -63,7 +64,7 @@ type sessionItem struct {
 	Status        string `json:"status"`
 	WaitingOn     string `json:"waiting_on,omitempty"`
 	WaitingTarget string `json:"waiting_target,omitempty"`
-	Since         string `json:"since"`
+	Since         string `json:"since,omitempty"`
 }
 
 // issueSessions convierte Issue.sessions (nil si no hay sesiones activas).
@@ -108,7 +109,11 @@ func listAgentSessionsTool() mcpserver.CustomTool {
 }
 
 type agentSessionOut struct {
-	Issue         string `json:"issue,omitempty"` // RND-236; vacío = sin issue
+	Issue string `json:"issue,omitempty"` // RND-236; vacío y sin project_id = sin issue
+	// ProjectID e IssueNumber: ligada a un proyecto que no está entre los
+	// leídos con ListProjects (ver projects_partial).
+	ProjectID     string `json:"project_id,omitempty"`
+	IssueNumber   int32  `json:"issue_number,omitempty"`
 	Agent         string `json:"agent"`
 	Name          string `json:"name,omitempty"`
 	Workspace     string `json:"workspace,omitempty"`
@@ -118,13 +123,15 @@ type agentSessionOut struct {
 	WaitingOn     string `json:"waiting_on,omitempty"`
 	WaitingTarget string `json:"waiting_target,omitempty"`
 	WaitingText   string `json:"waiting_text,omitempty"`
-	Since         string `json:"since"`
-	LastSeen      string `json:"last_seen"`
+	Since         string `json:"since,omitempty"`
+	LastSeen      string `json:"last_seen,omitempty"`
 }
 
 type agentSessionsOut struct {
 	Sessions   []agentSessionOut `json:"sessions"`
 	NextCursor string            `json:"next_cursor,omitempty"`
+	// ProjectsPartial: hay más proyectos visibles de los que se leen.
+	ProjectsPartial bool `json:"projects_partial,omitempty"`
 }
 
 func listAgentSessions(ctx context.Context, c *mcpserver.Caller, args map[string]any) (any, error) {
@@ -175,32 +182,27 @@ func listAgentSessions(ctx context.Context, c *mcpserver.Caller, args map[string
 	if q["unlinked"] == true && project != "" {
 		return nil, invalid("unlinked: no se combina con project ni issue")
 	}
-	if st, ok := args["status"]; ok {
-		list, isList := st.([]any)
-		if s, isStr := st.(string); isStr {
-			list, isList = []any{s}, true
+	sts, err := enumListArg(args, "status", sessionStatusBy, sessionStatusNames)
+	if err != nil {
+		return nil, err
+	}
+	if slices.Contains(sts, issuesv1.SessionStatus_SESSION_STATUS_ENDED) {
+		// Las terminadas no son activas: pedirlas es pedir las inactivas.
+		if v, ok := args["include_inactive"].(bool); ok && !v {
+			return nil, invalid("status: terminada necesita include_inactive (no false)")
 		}
-		if !isList {
-			return nil, invalid("status: lista de %s", strings.Join(sessionStatusNames, ", "))
-		}
-		var sts []any
-		for _, v := range list {
-			s, _ := v.(string)
-			sv, ok := sessionStatusBy[s]
-			if !ok {
-				return nil, invalid("status: lista de %s", strings.Join(sessionStatusNames, ", "))
-			}
-			if sv == issuesv1.SessionStatus_SESSION_STATUS_ENDED {
-				q["include_inactive"] = true
-			}
-			sts = append(sts, sv.String())
-		}
-		if len(sts) > 0 {
-			q["statuses"] = sts
+		q["include_inactive"] = true
+	}
+	if len(sts) > 0 {
+		q["statuses"] = enumStrings(sts)
+	}
+	if project != "" {
+		if project, err = projectKey(project); err != nil {
+			return nil, err
 		}
 	}
 
-	projects, _, err := allProjects(ctx, c)
+	projects, partial, err := allProjects(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -209,17 +211,9 @@ func listAgentSessions(ctx context.Context, c *mcpserver.Caller, args map[string
 		keys[p.GetId()] = p.GetKey()
 	}
 	if project != "" {
-		var p *issuesv1.Project
-		for _, cand := range projects {
-			if strings.EqualFold(cand.GetKey(), project) {
-				p = cand
-			}
-		}
-		if p == nil {
-			// Clave mal formada o no visible: el mismo error que las demás.
-			if p, err = findProject(ctx, c, project); err != nil {
-				return nil, err
-			}
+		p, err := projectByKey(projects, partial, project)
+		if err != nil {
+			return nil, err
 		}
 		q["project_id"] = p.GetId()
 		if number != "" {
@@ -230,7 +224,7 @@ func listAgentSessions(ctx context.Context, c *mcpserver.Caller, args map[string
 	if err := get(ctx, c, mListAgentSessions, q, &resp); err != nil {
 		return nil, err
 	}
-	out := agentSessionsOut{Sessions: make([]agentSessionOut, 0, len(resp.GetSessions()))}
+	out := agentSessionsOut{Sessions: make([]agentSessionOut, 0, len(resp.GetSessions())), ProjectsPartial: partial}
 	if resp.GetPage().GetHasNext() {
 		out.NextCursor = resp.GetPage().GetNextCursor()
 	}
@@ -248,8 +242,14 @@ func listAgentSessions(ctx context.Context, c *mcpserver.Caller, args map[string
 			Since:         rfc3339(s.GetStatusChangedAt()),
 			LastSeen:      rfc3339(s.GetLastSeenAt()),
 		}
-		if key, ok := keys[s.GetProjectId()]; ok && s.GetIssueNumber() > 0 {
-			o.Issue = fmt.Sprintf("%s-%d", key, s.GetIssueNumber())
+		if s.GetIssueNumber() > 0 {
+			if key, ok := keys[s.GetProjectId()]; ok {
+				o.Issue = fmt.Sprintf("%s-%d", key, s.GetIssueNumber())
+			} else {
+				// Ligada a un proyecto que no está entre los leídos: no se
+				// confunde con «sin issue».
+				o.ProjectID, o.IssueNumber = s.GetProjectId(), s.GetIssueNumber()
+			}
 		}
 		out.Sessions = append(out.Sessions, o)
 	}

@@ -220,26 +220,12 @@ func listIssues(ctx context.Context, c *mcpserver.Caller, args map[string]any) (
 	if err != nil {
 		return nil, err
 	}
-	if pr, ok := args["priority"]; ok {
-		list, isList := pr.([]any)
-		if s, isStr := pr.(string); isStr {
-			list, isList = []any{s}, true
-		}
-		if !isList {
-			return nil, invalid("priority: lista de %s", strings.Join(priorityNames, ", "))
-		}
-		var prs []any
-		for _, v := range list {
-			s, _ := v.(string)
-			pv, ok := priorityByName[s]
-			if !ok {
-				return nil, invalid("priority: lista de %s", strings.Join(priorityNames, ", "))
-			}
-			prs = append(prs, pv.String())
-		}
-		if len(prs) > 0 {
-			q["priorities"] = prs
-		}
+	prs, err := enumListArg(args, "priority", priorityByName, priorityNames)
+	if err != nil {
+		return nil, err
+	}
+	if len(prs) > 0 {
+		q["priorities"] = enumStrings(prs)
 	}
 	as, err := strArg(args, "assignee", false)
 	if err != nil {
@@ -463,14 +449,30 @@ var projectKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 // findProject resuelve la clave (sin distinguir mayúsculas) entre los
 // proyectos visibles para la credencial.
 func findProject(ctx context.Context, c *mcpserver.Caller, key string) (*issuesv1.Project, error) {
-	key = strings.ToUpper(strings.TrimSpace(key))
-	if !projectKeyRe.MatchString(key) {
-		return nil, invalid("project: clave de proyecto como RND (2 a 10 letras o dígitos)")
+	key, err := projectKey(key)
+	if err != nil {
+		return nil, err
 	}
 	projects, partial, err := allProjects(ctx, c)
 	if err != nil {
 		return nil, err
 	}
+	return projectByKey(projects, partial, key)
+}
+
+// projectKey normaliza y valida una clave de proyecto (sin llamar al
+// servicio).
+func projectKey(key string) (string, error) {
+	key = strings.ToUpper(strings.TrimSpace(key))
+	if !projectKeyRe.MatchString(key) {
+		return "", invalid("project: clave de proyecto como RND (2 a 10 letras o dígitos)")
+	}
+	return key, nil
+}
+
+// projectByKey busca una clave ya validada en una lista ya leída
+// (allProjects); partial es el de allProjects.
+func projectByKey(projects []*issuesv1.Project, partial bool, key string) (*issuesv1.Project, error) {
 	for _, p := range projects {
 		if strings.EqualFold(p.GetKey(), key) {
 			return p, nil
@@ -714,6 +716,42 @@ func strArg(args map[string]any, name string, required bool) (string, error) {
 		return "", invalid("falta el argumento %q", name)
 	}
 	return s, nil
+}
+
+// enumListArg lee un argumento que es un nombre o una lista de nombres de un
+// enum cerrado (names, para el mensaje) y devuelve los valores.
+func enumListArg[E interface{ String() string }](args map[string]any, name string, byName map[string]E, names []string) ([]E, error) {
+	v, ok := args[name]
+	if !ok || v == nil {
+		return nil, nil
+	}
+	list, isList := v.([]any)
+	if s, isStr := v.(string); isStr {
+		list, isList = []any{s}, true
+	}
+	bad := invalid("%s: lista de %s", name, strings.Join(names, ", "))
+	if !isList {
+		return nil, bad
+	}
+	out := make([]E, 0, len(list))
+	for _, item := range list {
+		s, _ := item.(string)
+		e, ok := byName[s]
+		if !ok {
+			return nil, bad
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+// enumStrings: los nombres proto de los valores, para la query string.
+func enumStrings[E interface{ String() string }](values []E) []any {
+	out := make([]any, len(values))
+	for i, v := range values {
+		out[i] = v.String()
+	}
+	return out
 }
 
 func intArg(args map[string]any, name string, def, lo, hi int) (int, error) {
