@@ -84,6 +84,11 @@ func TestScopesDeTokenComoClaimSeDescartan(t *testing.T) {
 	if w := e.do(http.MethodGet, "/v1/projects", "", n, v); w.Code != http.StatusForbidden {
 		t.Fatalf("JWT con issues:read como claim = %d, esperaba 403", w.Code)
 	}
+	// Issue 026: tampoco sessions:write, ni con el email en la allowlist.
+	n, v = e.creds.withEmail("u-claim", testAllowedEmail, true, auth.ScopeSessionsWrite)
+	if w := e.do(http.MethodPost, "/v1/agentSessions:report", "{}", n, v); w.Code != http.StatusForbidden {
+		t.Fatalf("JWT con sessions:write como claim = %d, esperaba 403", w.Code)
+	}
 }
 
 // CU-025-7: un token revocado, vencido o desconocido responde 401 en
@@ -145,5 +150,39 @@ func TestAuditoriaDeTokens(t *testing.T) {
 		if !strings.Contains(logs, want) {
 			t.Errorf("falta %s en el access log", want)
 		}
+	}
+}
+
+// CU-026-8: ReportSessions pide sessions:write. Sin ese scope (aunque tenga
+// los de issues) o con la sesión de Firebase, 403. Y sessions:write no da
+// lectura ni escritura de issues.
+func TestReportSessionsPideSessionsWrite(t *testing.T) {
+	e := newEnv(t, nil)
+	report := func(n, v string) int {
+		return e.do(http.MethodPost, "/v1/agentSessions:report", `{"source":"SESSION_SOURCE_HERDR","machine":"PC-01"}`, n, v).Code
+	}
+
+	issues := e.creds.tokens.add("persona-1", "", auth.ScopeIssuesRead, auth.ScopeIssuesWrite)
+	if c := report("Authorization", "Bearer "+issues); c != http.StatusForbidden {
+		t.Errorf("con issues:read+write = %d, esperaba 403", c)
+	}
+	if c := report(e.creds.withEmail("u-panel", testAllowedEmail, true)); c != http.StatusForbidden {
+		t.Errorf("con la sesión de Firebase (allowlist) = %d, esperaba 403", c)
+	}
+
+	sessions := e.creds.tokens.add("persona-1", "", auth.ScopeSessionsWrite)
+	if c := report("Authorization", "Bearer "+sessions); c != http.StatusOK {
+		t.Fatalf("con sessions:write = %d, esperaba 200", c)
+	}
+	_, md, _ := e.up.last()
+	if got := md.Get("x-roles"); len(got) != 1 || got[0] != auth.ScopeSessionsWrite {
+		t.Errorf("x-roles = %v", got)
+	}
+	if w := e.do(http.MethodGet, "/v1/projects", "", "Authorization", "Bearer "+sessions); w.Code != http.StatusForbidden {
+		t.Errorf("GET /v1/projects con solo sessions:write = %d, esperaba 403", w.Code)
+	}
+	// Leer sesiones es una lectura más.
+	if w := e.do(http.MethodGet, "/v1/agentSessions", "", "Authorization", "Bearer "+issues); w.Code != http.StatusOK {
+		t.Errorf("GET /v1/agentSessions con issues:read = %d, esperaba 200", w.Code)
 	}
 }

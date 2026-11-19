@@ -96,9 +96,16 @@ piden los clientes MCP).
   rechaza.
 - **Identidad:** `x-user-id` = la persona dueña, `x-agent-id` = el agente
   (si es de un agente), `x-roles` = los scopes (`issues:read`,
-  `issues:write`) y `x-auth-type: token`. Un token nunca recibe `allowlist`.
+  `issues:write`, `sessions:write`) y `x-auth-type: token`. Un token nunca
+  recibe `allowlist`.
 - **Los scopes solo salen de un token:** si un ID token de Firebase trae
-  `issues:read` o `issues:write` como custom claim, se descartan.
+  `issues:read`, `issues:write` o `sessions:write` como custom claim, se
+  descartan (`auth.TokenScopes`).
+- **`sessions:write` (issue 026):** solo abre `ReportSessions`, la ruta del
+  recolector local de herdr. No da lectura ni escritura de issues, y
+  `ReportSessions` no acepta otro rol (ni `allowlist`). `tekitla-issues` no
+  emite ese scope para un token de agente y rechaza a un agente en
+  `ReportSessions`.
 - **Rate limit:** con un token (de persona o de agente) el bucket es el de
   la persona dueña (`sub:<uid>`): crear agentes no multiplica la cuota.
 - **Request id:** `ResolveToken` va sin identidad pero con `x-request-id`,
@@ -118,7 +125,7 @@ piden los clientes MCP).
 | API2 Autenticación rota | Tokens de 256 bits aleatorios guardados como SHA-256, vencimiento obligatorio (≤ 90 días), revocación en cascada, sin el token en logs ni respuestas; formato validado antes de consultar; `401` sin detalle. |
 | API3 Autorización por propiedad | Las respuestas de tokens nunca traen el secreto ni el hash (solo `CreateToken` devuelve el secreto, una vez). `x-agent-id` lo pone solo el gateway. |
 | API4 Consumo de recursos | Caché positiva y negativa de 60 s (acotadas y separadas), una consulta por token a la vez, 30 consultas/min por IP para tokens desconocidos, timeout de 3 s a `ResolveToken`, rate limit por persona (no por agente) y buckets estrictos en `CreateToken`/`CreateAgent` (10/min). |
-| API5 Autorización por función | `routes.yaml`: lecturas con `issues:read`, escrituras con `issues:write` (write no implica read); agentes y tokens solo con `allowlist` (un token no crea agentes ni tokens; el servicio también lo rechaza). `ImportIssue` con `deny: true`. |
+| API5 Autorización por función | `routes.yaml`: lecturas con `issues:read`, escrituras con `issues:write` (write no implica read); agentes y tokens solo con `allowlist` (un token no crea agentes ni tokens; el servicio también lo rechaza). `ReportSessions` solo con `sessions:write` (issue 026). `ImportIssue` con `deny: true`. |
 | API6 Flujos de negocio sensibles | Emitir tokens pide sesión de Firebase de la persona; rate limit propio. |
 | API7 SSRF | No aplica: el gateway no hace requests a URLs del cliente. |
 | API8 Configuración | Denegar por defecto; sin variables nuevas; los scopes de token no se pueden obtener por claims. |

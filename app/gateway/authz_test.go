@@ -132,6 +132,8 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		// Issue 009: gestión de enlaces de solo lectura.
 		"GET /v1/projects/{project_id}/share-links", "POST /v1/projects/{project_id}/share-links",
 		"POST /v1/projects/{project_id}/share-links/{share_link_id}:revoke",
+		// Issue 026: sesiones de agentes.
+		"GET /v1/agentSessions", "POST /v1/agentSessions:report",
 	}
 	// Issue 009: lo único público (lectura por el token de un enlace).
 	wantPublic := []string{"POST /v1/shared/issues:get", "POST /v1/shared/issues:list", "POST /v1/shared/project:get"}
@@ -159,6 +161,10 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		wantRoles := []string{auth.AllowlistRole}
 		switch {
 		case strings.HasPrefix(b.Method, "issues.v1.ActorService/"), strings.HasPrefix(b.Method, "issues.v1.ShareLinkService/"):
+		case b.Method == "issues.v1.AgentSessionService/ReportSessions":
+			// Solo el recolector: un token de persona con sessions:write. La
+			// sesión de Firebase (allowlist) no reporta.
+			wantRoles = []string{auth.ScopeSessionsWrite}
 		case b.Verb == http.MethodGet:
 			wantRoles = append(wantRoles, auth.ScopeIssuesRead)
 		default:

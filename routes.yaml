@@ -65,6 +65,12 @@ version: 1
 # el path, nunca el cuerpo), bucket propio por IP y más estricto que el de
 # las lecturas autenticadas. El gateway no lee credenciales en estas rutas.
 # Un `tks_` nunca es una credencial: como Bearer en otra ruta, 401.
+#
+# Issue 026: sesiones de agentes. ReportSessions la usa solo el recolector
+# local de herdr con un token de persona con `sessions:write` (no la sesión de
+# Firebase: el panel no reporta). ListAgentSessions es una lectura más
+# (`allowlist` o `issues:read`) y la herramienta MCP list_agent_sessions
+# (app/mcptools/sessions.go).
 
 defaults:
   timeout: 10s
@@ -340,3 +346,23 @@ routes:
     rate_limit:
       per_minute: 60
       burst: 20
+
+  # --- Sesiones de agentes (issue 026) ---------------------------------------
+  # Solo el recolector (token de persona con sessions:write). Por máquina: un
+  # latido cada 2 min más un reporte por cambio (lee cada 15 s, así que 4/min
+  # como máximo). El bucket es por persona: 30/min con ráfaga de 10 alcanza
+  # para unas 7 máquinas cambiando sin parar; con más, subirlo. Hasta 200
+  # sesiones por reporte.
+  issues.v1.AgentSessionService/ReportSessions:
+    roles: [sessions:write]
+    timeout: 5s
+    max_body_bytes: 524288
+    rate_limit:
+      per_minute: 30
+      burst: 10
+
+  issues.v1.AgentSessionService/ListAgentSessions:
+    roles: [allowlist, issues:read]
+    mcp:
+      tool: list_agent_sessions
+      description: "Sesiones de agentes (de herdr): quién trabaja en qué issue y cómo está (trabajando, esperando-ok, en-reposo, colgado...), y si espera a una persona, a otra sesión o a otra cosa. Filtros: project, issue (RND-236), status, unlinked. Por defecto, solo las activas."

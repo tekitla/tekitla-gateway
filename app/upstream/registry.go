@@ -40,4 +40,10 @@ var Services = []Service{
 		GRPCService: "issues.v1.SharedProjectService",
 		Register:    issuesv1.RegisterSharedProjectServiceHandler,
 	},
+	{
+		// Sesiones de agentes (issue 026): mismo upstream.
+		Name:        "issues",
+		GRPCService: "issues.v1.AgentSessionService",
+		Register:    issuesv1.RegisterAgentSessionServiceHandler,
+	},
 }
