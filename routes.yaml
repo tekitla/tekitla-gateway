@@ -303,3 +303,6 @@ routes:
 
   issues.v1.AgentSessionService/ListAgentSessions:
     roles: [allowlist, issues:read]
+    mcp:
+      tool: list_agent_sessions
+      description: "Sesiones de agentes (de herdr): quién trabaja en qué issue y cómo está (trabajando, esperando-ok, en-reposo, colgado...), y si espera a una persona, a otra sesión o a otra cosa. Filtros: project, issue (RND-236), status, unlinked. Por defecto, solo las activas."

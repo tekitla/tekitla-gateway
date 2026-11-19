@@ -84,6 +84,11 @@ func TestScopesDeTokenComoClaimSeDescartan(t *testing.T) {
 	if w := e.do(http.MethodGet, "/v1/projects", "", n, v); w.Code != http.StatusForbidden {
 		t.Fatalf("JWT con issues:read como claim = %d, esperaba 403", w.Code)
 	}
+	// Issue 026: tampoco sessions:write, ni con el email en la allowlist.
+	n, v = e.creds.withEmail("u-claim", testAllowedEmail, true, auth.ScopeSessionsWrite)
+	if w := e.do(http.MethodPost, "/v1/agentSessions:report", "{}", n, v); w.Code != http.StatusForbidden {
+		t.Fatalf("JWT con sessions:write como claim = %d, esperaba 403", w.Code)
+	}
 }
 
 // CU-025-7: un token revocado, vencido o desconocido responde 401 en

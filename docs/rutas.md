@@ -17,7 +17,7 @@
 
 ## Rutas de Tekitla
 
-Las 21 de `issues.v1.IssueService` (tekitla-protos `v0.8.0`: rebanada 1, 3a e
+Las 21 de `issues.v1.IssueService` (tekitla-protos `v0.10.0`: rebanada 1, 3a e
 issues 011, 013, 025, 033 y 036; el 012 suma parámetros a `ListIssues`), con
 `roles: [allowlist, issues:read]` las lecturas y `[allowlist, issues:write]`
 las escrituras (sesión de Firebase en la allowlist **o** un token `tka_` con
@@ -58,6 +58,15 @@ por gRPC). Lecturas: bucket global (600/min, ráfaga
 | `ListTokens` | `GET /v1/tokens` | global (solo `allowlist`) |
 | `CreateToken` | `POST /v1/tokens` | 10/min, ráfaga 5 (solo `allowlist`) |
 | `RevokeToken` | `POST /v1/tokens/{token_id}:revoke` | 30/min, ráfaga 10 (solo `allowlist`) |
+| `ListAgentSessions` | `GET /v1/agentSessions` | global (`allowlist` o `issues:read`) |
+| `ReportSessions` | `POST /v1/agentSessions:report` | 30/min, ráfaga 10; body ≤ 512 KiB (hasta 200 sesiones); **solo `sessions:write`** |
+
+Sesiones de agentes (issue 026, `issues.v1.AgentSessionService`):
+`ReportSessions` la llama solo el recolector local de herdr
+(`tekitla-issues/tools/herdr-collector`) con un token de persona con
+`sessions:write`; ese scope no da lectura ni escritura de issues, y la sesión
+de Firebase no reporta (`TestReportSessionsPideSessionsWrite`). El servicio
+rechaza además un token de agente (`PERMISSION_DENIED`).
 
 Búsqueda, filtros y orden de `ListIssues` (issue 012) van en la query string,
 con los nombres del `.proto`. Las listas repiten el parámetro y los enums
@@ -210,7 +219,7 @@ issues.v1.IssueService/GetIssue:
   confirmación). Respuestas de más de 256 KiB se cortan con un error que pide
   paginar.
 
-**En Tekitla (issues 030 y 036) las cinco herramientas son propias del repo**
+**En Tekitla (issues 030, 036 y 026) las seis herramientas son propias del repo**
 (`app/mcptools`), porque la genérica no alcanza: el contrato pide el id del
 proyecto (los agentes conocen la clave `RND`), `get_issue` junta `GetIssue`
 con el historial y los nombres de estados y etiquetas, y `next_issue` fija
@@ -231,7 +240,13 @@ El gancho (`app/mcpserver/custom.go`) mantiene la regla de la plantilla:
 | `list_issues` | `routes.yaml` (`ListIssues`) | `ListProjects` (clave → id), `ListStatuses`, `ListLabels`, `ListIssues` |
 | `get_issue` | `routes.yaml` (`GetIssue`) | `ListProjects`, `GetIssue`, `ListIssueEvents` (se recorre y quedan los últimos), `ListStatuses`, `ListLabels` |
 | `next_issue` | `app/mcptools` | `ListProjects`, `ListIssues` con `state=TODO`, `unassigned`, `order_by=PRIORITY_DESC`, `page.limit=1`, y nombres |
+| `list_agent_sessions` | `routes.yaml` (`ListAgentSessions`) | `ListProjects` (clave → id y la clave de cada sesión), `ListAgentSessions`; estados con los nombres de `docs/03` §4 (`trabajando`, `esperando-ok`, `colgado`...) |
 | `get_flow_metrics` | `routes.yaml` (`GetFlowMetrics`) | `ListProjects`, `ListStatuses`, `ListLabels` (nombres de etiquetas → ids), `GetFlowMetrics` con `from`/`to` = las 00:00 de los días pedidos en `time_zone` (`to` incluido) |
+
+`list_issues` y `get_issue` traen además `sessions` (issue 026,
+`Issue.sessions`): `active`, `working`, `waiting`, `stalled`, `idle` y
+`needs_person`, y en `get_issue` también `items` (quién atiende, hasta 5).
+Se omite si el issue no tiene sesiones activas.
 
 Ninguna ruta de escritura lleva `mcp:` (`TestMCPSoloRutasDeLectura`). Cada
 RPC interno cuenta para el rate limit de su ruta, así que hay topes por
