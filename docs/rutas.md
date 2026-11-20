@@ -44,7 +44,7 @@ por gRPC). Lecturas: bucket global (600/min, ráfaga
 | `CreateComment` | `POST /v1/projects/{project_id}/issues/{number}/comments` | 60/min, ráfaga 20 |
 | `ListIssueEvents` | `GET /v1/projects/{project_id}/issues/{number}/events` | global |
 | `GetFlowMetrics` | `GET /v1/projects/{project_id}/flowMetrics` | 60/min, ráfaga 10; timeout 20 s (issue 036: recalcula la historia del proyecto) |
-| `GetIssueFlowEfficiency` | `GET /v1/projects/{project_id}/issues/{number}/flowEfficiency` | Lectura (`allowlist` o `issues:read`), límites por defecto (issue 036 parte 3: eficiencia de un issue según sus sesiones) |
+| `GetIssueFlowEfficiency` | `GET /v1/projects/{project_id}/issues/{number}/flowEfficiency` | 60/min, ráfaga 10; timeout 20 s, como `GetFlowMetrics` (issue 036 parte 3: eficiencia de un issue según sus sesiones) |
 | `ListStatuses` | `GET /v1/projects/{project_id}/statuses` | global |
 | `CreateStatus` | `POST /v1/projects/{project_id}/statuses` | 30/min, ráfaga 10 |
 | `UpdateStatus` | `PATCH /v1/projects/{project_id}/statuses/{status_id}` | 30/min, ráfaga 10 |

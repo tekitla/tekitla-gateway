@@ -132,8 +132,14 @@ routes:
 
   # Issue 036 parte 3 (CU-036-6): eficiencia de un issue según sus sesiones.
   # Sin herramienta propia: get_flow_metrics la usa con el argumento issue.
+  # Recalcula la historia de sesiones como GetFlowMetrics: mismo bucket y
+  # mismo tiempo (un agente en bucle por issue no se salta el límite).
   issues.v1.IssueService/GetIssueFlowEfficiency:
     roles: [allowlist, issues:read]
+    timeout: 20s
+    rate_limit:
+      per_minute: 60
+      burst: 10
 
   # --- Escrituras (POST): body chico, timeout corto y bucket propio ----------
   issues.v1.IssueService/CreateProject:

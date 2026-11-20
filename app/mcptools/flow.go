@@ -39,7 +39,8 @@ func flowMetricsTool() mcpserver.CustomTool {
 			"labels":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Solo issues con alguna de estas etiquetas (nombres), p. ej. un área"},
 			"time_zone": str("Zona IANA de las semanas y las fechas (America/Mexico_City por defecto)"),
 			"stale":     map[string]any{"type": "integer", "minimum": 0, "maximum": maxStale, "description": "Cuántos estancados listar (10 por defecto)"},
-			"issue":     str("Solo este issue (número o clave, p. ej. RND-279): dónde se fue su tiempo según sus sesiones de agentes. Sin from, desde su alta"),
+			"issue": map[string]any{"type": []any{"string", "integer"},
+				"description": "Solo este issue (número o clave, p. ej. RND-279): dónde se fue su tiempo según sus sesiones de agentes. Sin from, desde su alta. No va con labels ni stale"},
 		}, "project"),
 		Methods: []string{mListProjects, mFlowMetrics, mListStatuses, mListLabels, mIssueFlowEfficiency},
 		Handle:  flowMetrics,
@@ -179,6 +180,13 @@ func flowMetrics(ctx context.Context, c *mcpserver.Caller, args map[string]any) 
 		return nil, err
 	}
 	if oneIssue {
+		// labels y stale son del proyecto: con issue no se usarían.
+		if _, ok := args["labels"]; ok {
+			return nil, invalid("labels no va con issue: la eficiencia de un issue no se filtra por etiqueta")
+		}
+		if _, ok := args["stale"]; ok {
+			return nil, invalid("stale no va con issue")
+		}
 		return issueFlow(ctx, c, p, number, q, loc)
 	}
 	q["project_id"] = p.GetId()

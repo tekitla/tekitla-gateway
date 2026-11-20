@@ -45,7 +45,7 @@ type queueOut struct {
 type windowOut struct {
 	From                string   `json:"from"`
 	To                  string   `json:"to"`
-	TimeSpent           timeOut  `json:"time_spent"`
+	TimeSpent           *timeOut `json:"time_spent,omitempty"`
 	ResponseMedianHours *float64 `json:"response_median_hours,omitempty"`
 	WIPMedian           int32    `json:"wip_median"`
 	Closed              int32    `json:"closed"`
@@ -84,6 +84,15 @@ var reasonProfile = map[issuesv1.WaitingReason]string{
 	issuesv1.WaitingReason_WAITING_REASON_DEPLOY:   "DevOps",
 }
 
+// reasonText: el motivo en palabras; uno nuevo del contrato, con su nombre
+// del enum (no se pierde ni se junta con otro).
+func reasonText(r issuesv1.WaitingReason) string {
+	if name, ok := reasonName[r]; ok {
+		return name
+	}
+	return r.String()
+}
+
 func hours(d *durationpb.Duration) float64 {
 	return math.Round(d.AsDuration().Hours()*10) / 10
 }
@@ -113,7 +122,7 @@ func timeSpent(e *issuesv1.FlowEfficiency) *timeOut {
 		if o.WaitingByReason == nil {
 			o.WaitingByReason = map[string]float64{}
 		}
-		o.WaitingByReason[reasonName[rt.GetReason()]] = hours(rt.GetDuration())
+		o.WaitingByReason[reasonText(rt.GetReason())] += hours(rt.GetDuration())
 	}
 	return o
 }
@@ -135,9 +144,7 @@ func window(w *issuesv1.SignalWindow, loc *time.Location) *windowOut {
 		return nil
 	}
 	o := &windowOut{From: day(w.GetStart(), loc), To: lastDay(w.GetEnd(), loc), WIPMedian: w.GetWipMedian(), Closed: w.GetClosed()}
-	if t := timeSpent(w.GetEfficiency()); t != nil {
-		o.TimeSpent = *t
-	}
+	o.TimeSpent = timeSpent(w.GetEfficiency())
 	if w.GetHumanResponse().GetCount() > 0 {
 		o.ResponseMedianHours = hoursPtr(w.GetHumanResponse().GetMedian())
 	}
@@ -153,7 +160,7 @@ func hiringSignal(s *issuesv1.HiringSignal, loc *time.Location) *signalOut {
 		Current: window(s.GetCurrent(), loc), Previous: window(s.GetPrevious(), loc),
 	}
 	for _, p := range s.GetProfiles() {
-		o.Profiles = append(o.Profiles, profileOut{Profile: reasonProfile[p.GetReason()], Reason: reasonName[p.GetReason()], SharePct: float64(p.GetShareBp()) / 100})
+		o.Profiles = append(o.Profiles, profileOut{Profile: reasonProfile[p.GetReason()], Reason: reasonText(p.GetReason()), SharePct: float64(p.GetShareBp()) / 100})
 	}
 	switch s.GetVerdict() {
 	case issuesv1.HiringVerdict_HIRING_VERDICT_INSUFFICIENT_DATA:
@@ -189,11 +196,14 @@ func sessionNotes(r *issuesv1.GetFlowMetricsResponse, loc *time.Location) []stri
 	if r.GetSessionsRecordedSince() == nil {
 		return []string{"Dónde se va el tiempo: todavía no hay historia de sesiones de agentes en este proyecto."}
 	}
-	return []string{
+	notes := []string{
 		"time_spent sale de las sesiones de agentes (registrado en vivo desde " + day(r.GetSessionsRecordedSince(), loc) +
 			"): tiempo de reloj del issue con prioridad trabajando > espera a una persona > bloqueado > en revisión. Las noches y los fines de semana cuentan. efficiency_pct = trabajando / (trabajando + esperas).",
-		"La señal de contratación es una señal, no una decisión: sus números están en current y previous.",
 	}
+	if r.GetHiringSignal() != nil {
+		notes = append(notes, "La señal de contratación es una señal, no una decisión: sus números están en current y previous.")
+	}
+	return notes
 }
 
 type issueFlowOut struct {
@@ -255,8 +265,13 @@ func issueFlow(ctx context.Context, c *mcpserver.Caller, p *issuesv1.Project, nu
 		out.From = t.In(loc).Format(time.DateOnly)
 	}
 	if v, ok := q["to"].(string); ok {
+		// to es el día siguiente al último incluido; uno futuro se mide hasta hoy.
 		t, _ := time.Parse(time.RFC3339, v)
-		out.To = t.In(loc).AddDate(0, 0, -1).Format(time.DateOnly)
+		if now := time.Now(); t.After(now) {
+			out.To = now.In(loc).Format(time.DateOnly)
+		} else {
+			out.To = t.In(loc).AddDate(0, 0, -1).Format(time.DateOnly)
+		}
 	}
 	if resp.GetRecordedSince() != nil {
 		out.RecordedSince = day(resp.GetRecordedSince(), loc)

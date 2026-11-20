@@ -228,7 +228,8 @@ func TestMCPGetFlowMetricsIssue(t *testing.T) {
 		ts.ByReason["revision"] != 4 || ts.ByReason["sin motivo"] != 1 || out.RecordedSince != "2026-12-01" {
 		t.Errorf("CU-036-6: %+v %+v", out, ts)
 	}
-	if q := out.HumanQueue; q == nil || q.Pending != 1 || *q.OldestPendingHours != 1.5 || *q.ResponseMedianHours != 2 {
+	if q := out.HumanQueue; q == nil || q.Pending != 1 || q.OldestPendingHours == nil || *q.OldestPendingHours != 1.5 ||
+		q.ResponseMedianHours == nil || *q.ResponseMedianHours != 2 {
 		t.Errorf("cola: %+v", q)
 	}
 
@@ -239,9 +240,24 @@ func TestMCPGetFlowMetricsIssue(t *testing.T) {
 		t.Errorf("sin historia: %+v", out)
 	}
 	// Un issue de otro proyecto o mal escrito no llega al servicio.
-	for _, bad := range []any{"TK-3", "abc", -2} {
-		if res, text := e.callTool(sess, "get_flow_metrics", map[string]any{"project": "RND", "issue": bad}); !res.IsError || !strings.Contains(text, "INVALID_ARGUMENT") {
-			t.Errorf("issue %v: %s", bad, text)
+	for _, bad := range []map[string]any{
+		{"project": "RND", "issue": "TK-3"},
+		{"project": "RND", "issue": "abc"},
+		{"project": "RND", "issue": -2},
+		{"project": "RND", "issue": 236, "labels": []any{"no-existe"}},
+		{"project": "RND", "issue": 236, "stale": 3},
+	} {
+		if res, text := e.callTool(sess, "get_flow_metrics", bad); !res.IsError || !strings.Contains(text, "INVALID_ARGUMENT") {
+			t.Errorf("%v: %s", bad, text)
+		}
+	}
+	for _, r := range e.up.requests() {
+		if r.method == "/issues.v1.IssueService/GetIssueFlowEfficiency" {
+			var got issuesv1.GetIssueFlowEfficiencyRequest
+			_ = proto.Unmarshal(r.raw, &got)
+			if got.GetNumber() == 236 && got.From == nil {
+				t.Fatalf("un issue con labels o stale llegó al servicio: %v", &got)
+			}
 		}
 	}
 }
