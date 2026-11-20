@@ -17,7 +17,7 @@
 
 ## Rutas de Tekitla
 
-Las 21 de `issues.v1.IssueService` (tekitla-protos `v0.10.0`: rebanada 1, 3a e
+Las 21 de `issues.v1.IssueService` (tekitla-protos `v0.11.0`: rebanada 1, 3a e
 issues 011, 013, 025, 033 y 036; el 012 suma parámetros a `ListIssues`), con
 `roles: [allowlist, issues:read]` las lecturas y `[allowlist, issues:write]`
 las escrituras (sesión de Firebase en la allowlist **o** un token `tka_` con
