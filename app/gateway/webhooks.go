@@ -41,19 +41,25 @@ const (
 	webhookTimeout = 5 * time.Second
 )
 
-// webhookRate es el bucket por IP de cada proveedor. GitHub entrega desde
-// pocas IPs, así que es alto: es contra abuso, no contra GitHub. Un 429 deja
-// la entrega como fallida en GitHub; «Sincronizar» la recupera.
-var webhookRate = ratelimit.Rate{PerMinute: 120, Burst: 60}
+// webhookRate es el bucket por IP de cada proveedor. GitHub entrega todo
+// desde pocas IPs (y no reintenta solo un 429), así que es alto: es contra
+// abuso, no contra GitHub. La App solo manda los cuatro eventos suscritos
+// (push, pull_request, pull_request_review, check_suite), no check_run ni
+// workflow_job. Si aun así se pierde una entrega, «Sincronizar» la recupera.
+var webhookRate = ratelimit.Rate{PerMinute: 600, Burst: 300}
 
 // webhookHeaders son las únicas cabeceras que se copian, por proveedor. El
 // resto se descarta.
 type webhookHeaders struct {
-	provider  issuesv1.RepoProvider
-	event     string
-	delivery  string
-	signature string // GitHub
-	token     string // GitLab
+	provider issuesv1.RepoProvider
+	event    string
+	delivery string
+	// deliveryFirst, si viene, gana sobre delivery: GitLab manda
+	// Idempotency-Key igual en los reintentos de una entrega (17.4+), y
+	// X-Gitlab-Event-UUID en versiones anteriores.
+	deliveryFirst string
+	signature     string // GitHub
+	token         string // GitLab
 }
 
 var webhookProviders = map[string]webhookHeaders{
@@ -63,7 +69,8 @@ var webhookProviders = map[string]webhookHeaders{
 	},
 	WebhookPathGitLab: {
 		provider: issuesv1.RepoProvider_REPO_PROVIDER_GITLAB,
-		event:    "X-Gitlab-Event", delivery: "X-Gitlab-Event-UUID", token: "X-Gitlab-Token",
+		event:    "X-Gitlab-Event", delivery: "X-Gitlab-Event-UUID", deliveryFirst: "Idempotency-Key",
+		token: "X-Gitlab-Token",
 	},
 }
 
@@ -131,10 +138,14 @@ func (h *webhookHandler) serve(w http.ResponseWriter, r *http.Request, hdr webho
 		}
 		return v
 	}
+	delivery := get(hdr.deliveryFirst)
+	if delivery == "" {
+		delivery = get(hdr.delivery)
+	}
 	req := &issuesv1.ReceiveWebhookRequest{
 		Provider:   hdr.provider,
 		Event:      get(hdr.event),
-		DeliveryId: get(hdr.delivery),
+		DeliveryId: delivery,
 		Signature:  get(hdr.signature),
 		Token:      get(hdr.token),
 		Body:       bytes.Clone(body),
@@ -153,8 +164,13 @@ func (h *webhookHandler) serve(w http.ResponseWriter, r *http.Request, hdr webho
 		writeJSON(w, http.StatusAccepted, `{"status":"ignored"}`)
 	case issuesv1.WebhookOutcome_WEBHOOK_OUTCOME_DUPLICATE:
 		writeJSON(w, http.StatusOK, `{"status":"duplicate"}`)
-	default:
+	case issuesv1.WebhookOutcome_WEBHOOK_OUTCOME_PROCESSED:
 		writeJSON(w, http.StatusOK, `{"status":"processed"}`)
+	default:
+		// Sin resultado (o uno nuevo que este gateway no conoce): que la
+		// entrega figure como fallida y se vea.
+		h.log.ErrorContext(r.Context(), "webhook: resultado desconocido", slog.String("outcome", resp.GetOutcome().String()))
+		apierror.Write(w, r, http.StatusInternalServerError, "INTERNAL", "error interno")
 	}
 }
 
@@ -166,8 +182,13 @@ func (h *webhookHandler) fail(w http.ResponseWriter, r *http.Request, err error)
 		apierror.Write(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", "firma inválida")
 	case codes.InvalidArgument:
 		apierror.Write(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "entrega inválida")
-	case codes.Unavailable, codes.DeadlineExceeded:
+	case codes.Unavailable, codes.DeadlineExceeded, codes.Canceled:
+		// Canceled: el proveedor cortó la conexión; no es un error del servicio.
 		apierror.Write(w, r, http.StatusServiceUnavailable, "UNAVAILABLE", "servicio no disponible")
+	case codes.ResourceExhausted:
+		apierror.Write(w, r, http.StatusTooManyRequests, "RESOURCE_EXHAUSTED", "demasiados requests; reintentá más tarde")
+	case codes.NotFound, codes.FailedPrecondition, codes.AlreadyExists:
+		apierror.Write(w, r, http.StatusBadRequest, "INVALID_ARGUMENT", "entrega inválida")
 	default:
 		h.log.ErrorContext(r.Context(), "webhook: error del servicio", slog.String("code", status.Code(err).String()))
 		apierror.Write(w, r, http.StatusInternalServerError, "INTERNAL", "error interno")

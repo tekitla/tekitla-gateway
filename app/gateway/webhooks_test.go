@@ -85,6 +85,9 @@ func TestWebhook_Errors(t *testing.T) {
 		{status.Error(codes.Unauthenticated, "invalid webhook signature: detalle interno"), http.StatusUnauthorized},
 		{status.Error(codes.InvalidArgument, "x"), http.StatusBadRequest},
 		{status.Error(codes.Unavailable, "x"), http.StatusServiceUnavailable},
+		{status.Error(codes.Canceled, "x"), http.StatusServiceUnavailable},
+		{status.Error(codes.ResourceExhausted, "x"), http.StatusTooManyRequests},
+		{status.Error(codes.FailedPrecondition, "x"), http.StatusBadRequest},
 		{status.Error(codes.Internal, "secreto interno"), http.StatusInternalServerError},
 	}
 	for _, c := range cases {
@@ -115,7 +118,7 @@ func TestWebhook_Errors(t *testing.T) {
 func TestWebhook_RateLimitPerIP(t *testing.T) {
 	e := newEnv(t, nil, withWebhooks)
 	got429 := false
-	for i := 0; i < 70; i++ {
+	for i := 0; i < 310; i++ {
 		w := e.do(http.MethodPost, gateway.WebhookPathGitHub, `{}`)
 		if w.Code == http.StatusTooManyRequests {
 			got429 = true
@@ -126,7 +129,7 @@ func TestWebhook_RateLimitPerIP(t *testing.T) {
 		}
 	}
 	if !got429 {
-		t.Error("sin 429 tras la ráfaga de 60")
+		t.Error("sin 429 tras la ráfaga de 300")
 	}
 	// GitLab tiene su propio bucket.
 	if w := e.do(http.MethodPost, gateway.WebhookPathGitLab, `{}`); w.Code == http.StatusTooManyRequests {
@@ -153,4 +156,31 @@ func TestWebhook_InternalRPCHasNoRoute(t *testing.T) {
 
 func withWebhooks(o *gateway.Options) {
 	o.Webhooks = issuesv1.NewWebhookServiceClient(o.Upstreams[0].Conn)
+}
+
+// GitLab: Idempotency-Key (igual en los reintentos) gana sobre el UUID.
+func TestWebhook_GitLabIdempotencyKey(t *testing.T) {
+	e := newEnv(t, nil, withWebhooks)
+	e.up.respond = func(string, []byte) (proto.Message, error) {
+		return &issuesv1.ReceiveWebhookResponse{Outcome: issuesv1.WebhookOutcome_WEBHOOK_OUTCOME_PROCESSED}, nil
+	}
+	e.do(http.MethodPost, gateway.WebhookPathGitLab, `{}`,
+		"X-Gitlab-Event-UUID", "u-1", "Idempotency-Key", "k-1", "X-Gitlab-Token", "tkw_x")
+	reqs := e.up.requests()
+	var got issuesv1.ReceiveWebhookRequest
+	_ = proto.Unmarshal(reqs[len(reqs)-1].raw, &got)
+	if got.GetDeliveryId() != "k-1" {
+		t.Errorf("delivery id = %q, want k-1", got.GetDeliveryId())
+	}
+}
+
+// Un resultado vacío (o desconocido) no se reporta como procesado.
+func TestWebhook_UnknownOutcomeFails(t *testing.T) {
+	e := newEnv(t, nil, withWebhooks)
+	e.up.respond = func(string, []byte) (proto.Message, error) {
+		return &issuesv1.ReceiveWebhookResponse{}, nil
+	}
+	if w := e.do(http.MethodPost, gateway.WebhookPathGitHub, `{}`); w.Code != http.StatusInternalServerError {
+		t.Errorf("outcome vacío: %d %s", w.Code, w.Body.String())
+	}
 }

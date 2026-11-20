@@ -83,7 +83,9 @@ Detalle: `docs/rutas.md`; auth: `docs/auth.md`.
    solo `[allowlist]`, igual que la gestión de enlaces (009). Excepciones:
    las tres de `SharedProjectService` son `public: true` (token `tks_` en el
    cuerpo, 009), y `ReportSessions` (026) pide solo `[sessions:write]`, sin
-   `allowlist` (la llama el recolector de herdr, no el panel).
+   `allowlist` (la llama el recolector de herdr, no el panel). `RepositoryService`
+   (016): solo `[allowlist]`, también sus lecturas, salvo `ListIssueLinks`
+   (`[allowlist, issues:read]`).
 4. `go test ./...`: `TestAutorizacionPorRuta` genera los casos solo
    (401/403/200; pública → 200; deny → 404; con `allowlist`, además 403 por
    email ajeno, sin verificar o rol puesto como claim). Si falla por "sin
@@ -110,7 +112,11 @@ tag (co-desarrollo): `go mod edit -replace` o `make workspace`.
    exp, nbf; tolerancia ≤ 60 s. Nunca `none` ni HS*.
 3. Los servicios reciben identidad **solo** por la metadata que arma el
    interceptor (`x-user-id`, `x-agent-id`, `x-roles`, `x-request-id`). Nunca reenviar
-   cabeceras del cliente (ni `Authorization`) ni metadata de vuelta.
+   cabeceras del cliente (ni `Authorization`) ni metadata de vuelta. **Única
+   excepción:** los webhooks (issue 016, `app/gateway/webhooks.go`) copian al
+   cuerpo del RPC interno el evento, el id de entrega y la firma o el secreto
+   del proveedor, porque es lo que el servicio verifica; nunca como identidad
+   ni como metadata, y ninguna otra cabecera.
 4. Errores 5xx: mensaje genérico + `request_id`. Nunca devolver `err.Error()`
    de un upstream ni stack traces.
 5. Logs: nunca query strings, cuerpos ni cabeceras sin `RedactHeaders`.

@@ -715,3 +715,25 @@ func TestMCPListAgentSessions(t *testing.T) {
 		}
 	}
 }
+
+// Issue 016: si los links fallan, get_issue sale igual (sin ellos).
+func TestMCPGetIssueSinLinks(t *testing.T) {
+	e := newMCPEnv(t)
+	e.up.mu.Lock()
+	e.up.respond = func(method string, raw []byte) (proto.Message, error) {
+		if method == "/issues.v1.RepositoryService/ListIssueLinks" {
+			return nil, status.Error(codes.Unimplemented, "no")
+		}
+		return tekitlaFake(method, raw)
+	}
+	e.up.mu.Unlock()
+	sess := e.mcpSession(e.creds.header("u-1", auth.ScopeIssuesRead))
+	var d struct {
+		Key              string
+		LinksUnavailable bool `json:"links_unavailable"`
+	}
+	e.callOK(sess, "get_issue", map[string]any{"key": "RND-236", "events": 0}, &d)
+	if d.Key != "RND-236" || !d.LinksUnavailable {
+		t.Fatalf("get_issue sin links = %+v", d)
+	}
+}

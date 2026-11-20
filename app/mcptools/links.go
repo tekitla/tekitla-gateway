@@ -37,8 +37,12 @@ func issueLinks(ctx context.Context, c *mcpserver.Caller, projectID, number stri
 	}
 	out := make([]linkOut, 0, len(resp.GetLinks()))
 	for _, l := range resp.GetLinks() {
+		repo := ""
+		if r := l.GetRepo(); r.GetOwner() != "" && r.GetName() != "" {
+			repo = r.GetOwner() + "/" + r.GetName()
+		}
 		out = append(out, linkOut{
-			Repo:      l.GetRepo().GetOwner() + "/" + l.GetRepo().GetName(),
+			Repo:      repo,
 			Branch:    l.GetBranch(),
 			PR:        l.GetPrNumber(),
 			PRTitle:   l.GetPrTitle(),

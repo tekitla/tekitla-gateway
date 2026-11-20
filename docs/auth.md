@@ -146,7 +146,7 @@ y la firma o el secreto al RPC interno `WebhookService/ReceiveWebhook`, y
 | API1 Autorización por objeto | El proyecto sale del repo conectado en `tekitla-issues`, nunca del payload. |
 | API2 Autenticación rota | HMAC-SHA256 en tiempo constante (GitHub) o SHA-256 del secreto `tkw_` (GitLab) en el servicio; `401` sin detalle; firma y secreto redactados en los logs. |
 | API3 Autorización por propiedad | La respuesta es solo `{"status":…}`. |
-| API4 Consumo de recursos | 1 MiB, 5 s y bucket propio por IP y proveedor (120/min, ráfaga 60), antes de leer el cuerpo. |
+| API4 Consumo de recursos | 1 MiB, 5 s y bucket propio por IP y proveedor (600/min, ráfaga 300), antes de leer el cuerpo. |
 | API5 Autorización por función | Sin credenciales de Tekitla: un webhook no puede llamar a ninguna otra ruta y ninguna credencial de Tekitla sirve acá. `ReceiveWebhook` no tiene ruta REST. |
 | API7 SSRF | El gateway no hace requests salientes por un webhook. |
 | API8 Configuración | Sin CORS útil (no hay Origin) ni cookies; se monta solo si hay cliente del RPC (`Options.Webhooks`). |

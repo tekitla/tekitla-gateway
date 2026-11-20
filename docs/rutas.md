@@ -95,12 +95,14 @@ El servicio rechaza además un token de agente (`PERMISSION_DENIED`).
   exacto y los payloads traen campos que ningún `.proto` tiene, así que no
   pueden pasar por grpc-gateway. Los atiende `app/gateway/webhooks.go`:
   - solo `POST`, `Content-Type: application/json`, 1 MiB y 5 s;
-  - bucket propio **por IP** y por proveedor (120/min, ráfaga 60);
+  - bucket propio **por IP** y por proveedor (600/min, ráfaga 300: GitHub
+    entrega todo desde pocas IPs y no reintenta solo un 429);
   - **no lee ninguna credencial de Tekitla** (ni `Authorization`) y no
     pasa por la allowlist: la autenticación es la firma
     (`X-Hub-Signature-256`) o el secreto (`X-Gitlab-Token`), y la verifica
     `tekitla-issues`. El gateway no tiene secretos de terceros;
-  - copia solo cuatro cabeceras (evento, id de entrega, firma o secreto) y
+  - copia solo las cabeceras que el servicio necesita (evento, id de entrega
+    —en GitLab, `Idempotency-Key` si viene—, firma o secreto) y
     el cuerpo crudo al RPC interno `issues.v1.WebhookService/ReceiveWebhook`
     (sin `google.api.http`: no hay ruta REST para llamarlo);
   - respuestas: `200 {"status":"processed"}` o `"duplicate"`,

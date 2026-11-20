@@ -331,6 +331,8 @@ type issueDetail struct {
 	EventsPartial bool `json:"events_partial,omitempty"`
 	// Links: ramas y PRs ligados (issue 016), con su CI; ausente si no hay.
 	Links []linkOut `json:"links,omitempty"`
+	// LinksUnavailable: no se pudieron leer los links; el resto vale.
+	LinksUnavailable bool `json:"links_unavailable,omitempty"`
 }
 
 var issueKeyRe = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]{0,8})$`)
@@ -373,8 +375,12 @@ func getIssue(ctx context.Context, c *mcpserver.Caller, args map[string]any) (an
 		UpdatedAt:     rfc3339(is.GetUpdatedAt()),
 		Events:        []eventOut{},
 	}
-	if d.Links, err = issueLinks(ctx, c, p.GetId(), m[2]); err != nil {
-		return nil, err
+	// Los links son un bloque extra: si no se pueden leer (servicio sin
+	// RepositoryService, timeout), el issue sale igual, con links_unavailable.
+	if links, lerr := issueLinks(ctx, c, p.GetId(), m[2]); lerr != nil {
+		d.LinksUnavailable = true
+	} else {
+		d.Links = links
 	}
 
 	if nEvents == 0 {

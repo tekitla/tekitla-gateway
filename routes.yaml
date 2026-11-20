@@ -374,7 +374,7 @@ routes:
   # Los webhooks (POST /v1/webhooks/github y /v1/webhooks/gitlab) NO están
   # acá: los atiende un handler propio (app/gateway/webhooks.go) porque la
   # firma es sobre el cuerpo crudo. Sin credenciales de Tekitla, bucket propio
-  # por IP (120/min, ráfaga 60), 1 MiB y 5 s; el RPC interno
+  # por IP (600/min, ráfaga 300), 1 MiB y 5 s; el RPC interno
   # WebhookService/ReceiveWebhook no tiene google.api.http (no hay ruta REST).
   # Inventario en docs/rutas.md.
   issues.v1.RepositoryService/ListConnections:
