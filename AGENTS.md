@@ -32,7 +32,7 @@ bucket propio por IP, 1 MiB y 5 s.
 
 `/mcp` (issue 030, opción `mcp` de la plantilla): seis herramientas de solo
 lectura, `list_projects`, `list_issues`, `get_issue`, `next_issue`,
-`get_flow_metrics` (issue 036, `app/mcptools/flow.go`) y
+`get_flow_metrics` (issue 036, `app/mcptools/flow.go` y, para la parte 3 —eficiencia, cola humana, señal y el argumento `issue`, que usa `GetIssueFlowEfficiency`—, `flow_sessions.go`) y
 `list_agent_sessions` (issue 026, `app/mcptools/sessions.go`; además
 `list_issues` y `get_issue` traen el bloque `sessions`; `get_issue`, además,
 el bloque `links` del issue 016, `app/mcptools/links.go`), propias

@@ -230,6 +230,10 @@ func tekitlaFake(method string, raw []byte) (proto.Message, error) {
 		var in issuesv1.GetFlowMetricsRequest
 		_ = proto.Unmarshal(raw, &in)
 		return fakeFlowMetrics(&in), nil
+	case "/issues.v1.IssueService/GetIssueFlowEfficiency":
+		var in issuesv1.GetIssueFlowEfficiencyRequest
+		_ = proto.Unmarshal(raw, &in)
+		return fakeIssueFlow(&in), nil
 	}
 	return nil, nil
 }

@@ -39,8 +39,9 @@ func flowMetricsTool() mcpserver.CustomTool {
 			"labels":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Solo issues con alguna de estas etiquetas (nombres), p. ej. un área"},
 			"time_zone": str("Zona IANA de las semanas y las fechas (America/Mexico_City por defecto)"),
 			"stale":     map[string]any{"type": "integer", "minimum": 0, "maximum": maxStale, "description": "Cuántos estancados listar (10 por defecto)"},
+			"issue":     str("Solo este issue (número o clave, p. ej. RND-279): dónde se fue su tiempo según sus sesiones de agentes. Sin from, desde su alta"),
 		}, "project"),
-		Methods: []string{mListProjects, mFlowMetrics, mListStatuses, mListLabels},
+		Methods: []string{mListProjects, mFlowMetrics, mListStatuses, mListLabels, mIssueFlowEfficiency},
 		Handle:  flowMetrics,
 		Hint:    flowHint,
 	}
@@ -49,7 +50,7 @@ func flowMetricsTool() mcpserver.CustomTool {
 // flowHint: como hint, con los errores propios de las métricas.
 func flowHint(code string) string {
 	if code == "INVALID_ARGUMENT" {
-		return "Revisá from y to (YYYY-MM-DD, from antes que to, a lo sumo 104 semanas), time_zone (IANA) y labels (list_issues muestra las etiquetas)."
+		return "Revisá from y to (YYYY-MM-DD, from antes que to, a lo sumo 104 semanas), time_zone (IANA), labels (list_issues muestra las etiquetas) e issue (número o clave del mismo proyecto)."
 	}
 	return hint(code)
 }
@@ -74,6 +75,9 @@ type weekOut struct {
 	Started     int32       `json:"started"`
 	WIP         int32       `json:"wip"`
 	Source      string      `json:"source"`
+	// Parte 3: ausentes en las semanas sin historia de sesiones.
+	TimeSpent  *timeOut  `json:"time_spent,omitempty"`
+	HumanQueue *queueOut `json:"human_queue,omitempty"`
 }
 
 type summaryOut struct {
@@ -86,6 +90,8 @@ type summaryOut struct {
 	WIP         int32          `json:"wip"`
 	Source      string         `json:"source"`
 	Events      map[string]int `json:"events_by_source"`
+	TimeSpent   *timeOut       `json:"time_spent,omitempty"`
+	HumanQueue  *queueOut      `json:"human_queue,omitempty"`
 }
 
 type staleOut struct {
@@ -110,12 +116,15 @@ type flowOut struct {
 	StaleTotal  int32      `json:"stale_total"`
 	Issues      int32      `json:"issues"`
 	// DoneWithoutDates: hechos sin fecha de cierre, fuera del cálculo.
-	DoneWithoutDates int32    `json:"done_without_dates"`
-	Notes            []string `json:"notes"`
+	DoneWithoutDates int32 `json:"done_without_dates"`
+	// SessionsSince: desde cuándo hay historia de sesiones (parte 3).
+	SessionsSince string     `json:"sessions_recorded_since,omitempty"`
+	HiringSignal  *signalOut `json:"hiring_signal,omitempty"`
+	Notes         []string   `json:"notes"`
 }
 
 func flowMetrics(ctx context.Context, c *mcpserver.Caller, args map[string]any) (any, error) {
-	if err := onlyKeys(args, "project", "from", "to", "labels", "time_zone", "stale"); err != nil {
+	if err := onlyKeys(args, "project", "from", "to", "labels", "time_zone", "stale", "issue"); err != nil {
 		return nil, err
 	}
 	key, err := strArg(args, "project", true)
@@ -165,6 +174,13 @@ func flowMetrics(ctx context.Context, c *mcpserver.Caller, args map[string]any) 
 	if err != nil {
 		return nil, err
 	}
+	number, oneIssue, err := issueArg(args, p.GetKey())
+	if err != nil {
+		return nil, err
+	}
+	if oneIssue {
+		return issueFlow(ctx, c, p, number, q, loc)
+	}
 	q["project_id"] = p.GetId()
 	names, err := loadNames(ctx, c, p.GetId())
 	if err != nil {
@@ -206,6 +222,7 @@ func flowResult(projectKey string, r *issuesv1.GetFlowMetricsResponse, n *names,
 				"import_file":    int(s.GetSource().GetImportFile()),
 				"import_sync":    int(s.GetSource().GetImportSync()),
 			},
+			TimeSpent: timeSpent(s.GetEfficiency()), HumanQueue: humanQueue(s.GetHumanQueue()),
 		},
 		Weeks:            make([]weekOut, 0, len(r.GetWeeks())),
 		Stale:            []staleOut{},
@@ -222,6 +239,7 @@ func flowResult(projectKey string, r *issuesv1.GetFlowMetricsResponse, n *names,
 			LeadTime: durationDays(w.GetLeadTime()), CycleTime: durationDays(w.GetCycleTime()),
 			ClosedValue: w.GetClosedValue(), ClosedOther: w.GetClosedOther(), Canceled: w.GetCanceled(),
 			Started: w.GetStarted(), WIP: w.GetWip(), Source: confidence(w.GetSource().GetConfidence()),
+			TimeSpent: timeSpent(w.GetEfficiency()), HumanQueue: humanQueue(w.GetHumanQueue()),
 		})
 	}
 	to := r.GetTo().AsTime()
@@ -259,6 +277,11 @@ func flowResult(projectKey string, r *issuesv1.GetFlowMetricsResponse, n *names,
 	if out.DoneWithoutDates > 0 {
 		out.Notes = append(out.Notes, fmt.Sprintf("%d issues hechos sin fecha de cierre conocida no entran al cálculo.", out.DoneWithoutDates))
 	}
+	if r.GetSessionsRecordedSince() != nil {
+		out.SessionsSince = day(r.GetSessionsRecordedSince(), loc)
+	}
+	out.HiringSignal = hiringSignal(r.GetHiringSignal(), loc)
+	out.Notes = append(out.Notes, sessionNotes(r, loc)...)
 	return out
 }
 

@@ -119,6 +119,7 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		"PATCH /v1/projects/{project_id}/issues/{number}",
 		"POST /v1/projects/{project_id}/issues/{number}/comments",
 		"GET /v1/projects/{project_id}/issues/{number}/events",
+		"GET /v1/projects/{project_id}/issues/{number}/flowEfficiency",
 		// Issue 036: métricas de flujo.
 		"GET /v1/projects/{project_id}/flowMetrics",
 		"GET /v1/projects/{project_id}/statuses", "POST /v1/projects/{project_id}/statuses",

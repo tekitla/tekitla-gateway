@@ -44,6 +44,7 @@ por gRPC). Lecturas: bucket global (600/min, ráfaga
 | `CreateComment` | `POST /v1/projects/{project_id}/issues/{number}/comments` | 60/min, ráfaga 20 |
 | `ListIssueEvents` | `GET /v1/projects/{project_id}/issues/{number}/events` | global |
 | `GetFlowMetrics` | `GET /v1/projects/{project_id}/flowMetrics` | 60/min, ráfaga 10; timeout 20 s (issue 036: recalcula la historia del proyecto) |
+| `GetIssueFlowEfficiency` | `GET /v1/projects/{project_id}/issues/{number}/flowEfficiency` | Lectura (`allowlist` o `issues:read`), límites por defecto (issue 036 parte 3: eficiencia de un issue según sus sesiones) |
 | `ListStatuses` | `GET /v1/projects/{project_id}/statuses` | global |
 | `CreateStatus` | `POST /v1/projects/{project_id}/statuses` | 30/min, ráfaga 10 |
 | `UpdateStatus` | `PATCH /v1/projects/{project_id}/statuses/{status_id}` | 30/min, ráfaga 10 |
@@ -307,7 +308,7 @@ El gancho (`app/mcpserver/custom.go`) mantiene la regla de la plantilla:
 | `get_issue` | `routes.yaml` (`GetIssue`) | `ListProjects`, `GetIssue`, `ListIssueEvents` (se recorre y quedan los últimos), `ListStatuses`, `ListLabels` |
 | `next_issue` | `app/mcptools` | `ListProjects`, `ListIssues` con `state=TODO`, `unassigned`, `order_by=PRIORITY_DESC`, `page.limit=1`, y nombres |
 | `list_agent_sessions` | `routes.yaml` (`ListAgentSessions`) | `ListProjects` (clave → id y la clave de cada sesión), `ListAgentSessions`; estados con los nombres de `docs/03` §4 (`trabajando`, `esperando-ok`, `colgado`...) |
-| `get_flow_metrics` | `routes.yaml` (`GetFlowMetrics`) | `ListProjects`, `ListStatuses`, `ListLabels` (nombres de etiquetas → ids), `GetFlowMetrics` con `from`/`to` = las 00:00 de los días pedidos en `time_zone` (`to` incluido) |
+| `get_flow_metrics` | `routes.yaml` (`GetFlowMetrics`) | `ListProjects`, `ListStatuses`, `ListLabels` (nombres de etiquetas → ids), `GetFlowMetrics` con `from`/`to` = las 00:00 de los días pedidos en `time_zone` (`to` incluido); con `issue` (número o clave del mismo proyecto), `GetIssueFlowEfficiency` en lugar de `GetFlowMetrics` |
 
 `list_issues` y `get_issue` traen además `sessions` (issue 026,
 `Issue.sessions`): `active`, `working`, `waiting`, `stalled`, `idle` y
