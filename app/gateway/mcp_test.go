@@ -214,6 +214,18 @@ func tekitlaFake(method string, raw []byte) (proto.Message, error) {
 				WaitingTarget: "tk-worktrees", WaitingText: "⏳ espera a tk-worktrees"},
 			{AgentDisplayName: "Codex PC-01", Machine: "PC-01", CwdRel: ".", Status: issuesv1.SessionStatus_SESSION_STATUS_IDLE},
 		}, Page: &issuesv1.PageResponse{HasNext: true, NextCursor: "c2"}}, nil
+	case "/issues.v1.RepositoryService/ListIssueLinks":
+		var in issuesv1.ListIssueLinksRequest
+		_ = proto.Unmarshal(raw, &in)
+		if in.GetIssueNumber() != 236 {
+			return &issuesv1.ListIssueLinksResponse{}, nil
+		}
+		return &issuesv1.ListIssueLinksResponse{Links: []*issuesv1.IssueLink{{
+			IssueNumber: 236, Branch: "feat/issue-236-capas", PrNumber: 7, PrTitle: "CLAUDE.md en capas",
+			PrState: issuesv1.PrState_PR_STATE_OPEN, CiStatus: issuesv1.CiStatus_CI_STATUS_FAILED, HeadTitle: "docs: capas",
+			Repo:   &issuesv1.Repository{Owner: "acme", Name: "front"},
+			WebUrl: "https://gitlab.example.com/acme/front/-/merge_requests/7",
+		}}}, nil
 	case "/issues.v1.IssueService/GetFlowMetrics":
 		var in issuesv1.GetFlowMetricsRequest
 		_ = proto.Unmarshal(raw, &in)
@@ -436,8 +448,17 @@ func TestMCPGetIssue(t *testing.T) {
 		Labels                                    []string
 		Events                                    []struct{ At, Actor, Agent, Change string }
 		EventsTotal                               int `json:"events_total"`
+		Links                                     []struct {
+			Repo, Branch, PRState, CI, URL string
+			PR                             int
+		} `json:"links"`
 	}
 	e.callOK(sess, "get_issue", map[string]any{"key": "rnd-236"}, &d)
+	// Issue 016: ramas y PRs ligados, con su CI.
+	if len(d.Links) != 1 || d.Links[0].Repo != "acme/front" || d.Links[0].PR != 7 || d.Links[0].CI != "failed" ||
+		d.Links[0].Branch != "feat/issue-236-capas" || d.Links[0].URL == "" {
+		t.Fatalf("links = %+v", d.Links)
+	}
 	if d.Key != "RND-236" || d.Title != "CLAUDE.md en capas" || d.Status != "En curso" || d.Priority != "high" || !slices.Equal(d.Labels, []string{"infra"}) {
 		t.Fatalf("issue = %+v", d)
 	}

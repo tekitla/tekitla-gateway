@@ -36,6 +36,8 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	issuesv1 "github.com/tekitla/tekitla-protos/gen/go/issues/v1"
+
 	"github.com/tekitla/tekitla-gateway/app/auth"
 	"github.com/tekitla/tekitla-gateway/app/mcpserver"
 	"github.com/tekitla/tekitla-gateway/app/middleware"
@@ -72,6 +74,9 @@ type Options struct {
 	// MCPTools: herramientas propias del repo (app/mcptools), además de las
 	// que salen de routes.yaml.
 	MCPTools []mcpserver.CustomTool
+	// Webhooks: cliente del RPC interno WebhookService (issue 016). nil: los
+	// paths /v1/webhooks/* no existen (404).
+	Webhooks issuesv1.WebhookServiceClient
 }
 
 // Report resume la validación de rutas que hace New.
@@ -159,6 +164,9 @@ func New(ctx context.Context, o Options) (http.Handler, *Report, error) {
 			return nil, nil, err
 		}
 		h = withMCP(mh, h)
+	}
+	if o.Webhooks != nil {
+		h = withWebhooks(&webhookHandler{log: o.Logger, client: o.Webhooks, limiter: o.Limiter}, h)
 	}
 	h = middleware.Chain(h,
 		middleware.Context(o.TrustedProxyHops),

@@ -132,6 +132,27 @@ piden los clientes MCP).
 | API9 Inventario | Las rutas nuevas salen de las anotaciones del `.proto` y `TestRutasDeTekitlaExigenAllowlist` fija la lista; `ResolveToken` no tiene ruta REST. |
 | API10 Consumo inseguro de APIs | La respuesta de `ResolveToken` se filtra: solo scopes conocidos, persona obligatoria. |
 
+## Webhooks de GitHub y GitLab (issue 016)
+
+Otro modelo de autenticación, sin sesión de Firebase ni `tka_`:
+`POST /v1/webhooks/github` y `/v1/webhooks/gitlab` (`app/gateway/webhooks.go`,
+detalle en `docs/rutas.md`). El gateway no verifica nada: pasa el cuerpo crudo
+y la firma o el secreto al RPC interno `WebhookService/ReceiveWebhook`, y
+`tekitla-issues` (que tiene el secreto de la GitHub App) responde
+`UNAUTHENTICATED` si no valen.
+
+| Riesgo | Cómo se cubre |
+|---|---|
+| API1 Autorización por objeto | El proyecto sale del repo conectado en `tekitla-issues`, nunca del payload. |
+| API2 Autenticación rota | HMAC-SHA256 en tiempo constante (GitHub) o SHA-256 del secreto `tkw_` (GitLab) en el servicio; `401` sin detalle; firma y secreto redactados en los logs. |
+| API3 Autorización por propiedad | La respuesta es solo `{"status":…}`. |
+| API4 Consumo de recursos | 1 MiB, 5 s y bucket propio por IP y proveedor (120/min, ráfaga 60), antes de leer el cuerpo. |
+| API5 Autorización por función | Sin credenciales de Tekitla: un webhook no puede llamar a ninguna otra ruta y ninguna credencial de Tekitla sirve acá. `ReceiveWebhook` no tiene ruta REST. |
+| API7 SSRF | El gateway no hace requests salientes por un webhook. |
+| API8 Configuración | Sin CORS útil (no hay Origin) ni cookies; se monta solo si hay cliente del RPC (`Options.Webhooks`). |
+| API9 Inventario | Los dos paths están en `docs/rutas.md` y en un comentario de `routes.yaml`; `TestWebhook_InternalRPCHasNoRoute`. |
+| API10 Consumo inseguro | El gateway no interpreta el payload; lo valida el servicio con structs mínimos. |
+
 ## Pruebas locales sin tokens reales (`FIREBASE_JWKS_URL`)
 
 Firebase no emite ID tokens para pruebas automatizadas (y el emulador de Auth

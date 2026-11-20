@@ -46,4 +46,11 @@ var Services = []Service{
 		GRPCService: "issues.v1.AgentSessionService",
 		Register:    issuesv1.RegisterAgentSessionServiceHandler,
 	},
+	{
+		// Repos de GitHub y GitLab (issue 016): gestión, autenticada. Los
+		// webhooks no pasan por acá (app/gateway/webhooks.go).
+		Name:        "issues",
+		GRPCService: "issues.v1.RepositoryService",
+		Register:    issuesv1.RegisterRepositoryServiceHandler,
+	},
 }

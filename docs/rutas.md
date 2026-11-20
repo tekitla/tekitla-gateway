@@ -67,6 +67,15 @@ por gRPC). Lecturas: bucket global (600/min, ráfaga
 | `GetSharedIssue` | `POST /v1/shared/issues:get` | **pública**: 60/min, ráfaga 20 por IP |
 | `ListAgentSessions` | `GET /v1/agentSessions` | global (`allowlist` o `issues:read`) |
 | `ReportSessions` | `POST /v1/agentSessions:report` | 30/min, ráfaga 10; body ≤ 512 KiB (hasta 200 sesiones); **solo `sessions:write`** |
+| `ListConnections` | `GET /v1/projects/{project_id}/connections` | global (solo `allowlist`) |
+| `ConnectOrganization` | `POST /v1/projects/{project_id}/connections` | 10/min, ráfaga 5; 30 s (solo `allowlist`) |
+| `UpdateConnection` | `PATCH /v1/projects/{project_id}/connections/{connection_id}` | 10/min, ráfaga 5; 30 s (solo `allowlist`) |
+| `DisconnectOrganization` | `POST /v1/projects/{project_id}/connections/{connection_id}:disconnect` | 10/min, ráfaga 5 (solo `allowlist`) |
+| `SyncRepositories` | `POST /v1/projects/{project_id}/connections/{connection_id}:sync` | 6/min, ráfaga 2; 30 s (solo `allowlist`) |
+| `ListRepositories` | `GET /v1/projects/{project_id}/repositories` | global (solo `allowlist`) |
+| `ListIssueLinks` | `GET /v1/projects/{project_id}/issueLinks` | global (`allowlist` o `issues:read`) |
+| `LinkIssue` | `POST /v1/projects/{project_id}/issues/{number}/links` | 30/min, ráfaga 10 (solo `allowlist`) |
+| `UnlinkIssue` | `POST /v1/projects/{project_id}/issues/{number}/links/{link_id}:unlink` | 30/min, ráfaga 10 (solo `allowlist`) |
 
 ### Sesiones de agentes (issue 026)
 
@@ -75,6 +84,31 @@ local de herdr (`tekitla-issues/tools/herdr-collector`) con un token de
 persona con `sessions:write`; ese scope no da lectura ni escritura de issues,
 y la sesión de Firebase no reporta (`TestReportSessionsPideSessionsWrite`).
 El servicio rechaza además un token de agente (`PERMISSION_DENIED`).
+
+### Repos de GitHub y GitLab (issue 016)
+
+- **Gestión** (`issues.v1.RepositoryService`): conexiones y links solo con la
+  sesión del panel (`allowlist`). Un `tka_` solo lee links (`issues:read`,
+  para el MCP y `tk`). Solo el dueño del proyecto: lo verifica el servicio.
+- **Webhooks** (`POST /v1/webhooks/github` y `POST /v1/webhooks/gitlab`): no
+  son rutas de `routes.yaml`. La firma de GitHub es un HMAC sobre el cuerpo
+  exacto y los payloads traen campos que ningún `.proto` tiene, así que no
+  pueden pasar por grpc-gateway. Los atiende `app/gateway/webhooks.go`:
+  - solo `POST`, `Content-Type: application/json`, 1 MiB y 5 s;
+  - bucket propio **por IP** y por proveedor (120/min, ráfaga 60);
+  - **no lee ninguna credencial de Tekitla** (ni `Authorization`) y no
+    pasa por la allowlist: la autenticación es la firma
+    (`X-Hub-Signature-256`) o el secreto (`X-Gitlab-Token`), y la verifica
+    `tekitla-issues`. El gateway no tiene secretos de terceros;
+  - copia solo cuatro cabeceras (evento, id de entrega, firma o secreto) y
+    el cuerpo crudo al RPC interno `issues.v1.WebhookService/ReceiveWebhook`
+    (sin `google.api.http`: no hay ruta REST para llamarlo);
+  - respuestas: `200 {"status":"processed"}` o `"duplicate"`,
+    `202 {"status":"ignored"}` (repo no conectado o evento que no interesa),
+    `401` sin detalle si la firma no vale, `400`, `413`, `415`, `429`, `503`.
+    El access log redacta la firma y el secreto (sus nombres contienen
+    «signature» y «token»).
+- Tests: `app/gateway/webhooks_test.go`.
 
 ### Enlaces de solo lectura (issue 009)
 
@@ -223,6 +257,7 @@ Formato único para todo lo que responde el gateway:
 | `GET /readyz` | `grpc.health.v1` de cada upstream (resultado cacheado 5 s) |
 | `GET /openapi.json` | OpenAPI de los protos, si `OPENAPI_ENABLED=true` (default: todo salvo production) |
 | `POST /mcp` | Servidor MCP para agentes (ver abajo) |
+| `POST /v1/webhooks/github`, `POST /v1/webhooks/gitlab` | Webhooks de repos (issue 016, ver arriba) |
 
 ## Herramientas MCP (`/mcp`)
 

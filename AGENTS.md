@@ -4,9 +4,9 @@
 
 Entrada pública REST de Tekitla: autentica con Firebase y traduce a gRPC.
 
-Tekitla (issue 002, rebanadas 1 y 3a, e issues 011 a 013, 025, 026, 033, 036 y 009): expone `issues.v1.IssueService`,
-`issues.v1.ActorService`, `issues.v1.ShareLinkService`, `issues.v1.SharedProjectService`
-e `issues.v1.AgentSessionService` (`github.com/tekitla/tekitla-protos@v0.10.0`) del servicio `tekitla-issues`
+Tekitla (issue 002, rebanadas 1 y 3a, e issues 011 a 013, 025, 026, 033, 036, 009 y 016): expone `issues.v1.IssueService`,
+`issues.v1.ActorService`, `issues.v1.ShareLinkService`, `issues.v1.SharedProjectService`,
+`issues.v1.AgentSessionService` e `issues.v1.RepositoryService` (`github.com/tekitla/tekitla-protos@v0.10.0`) del servicio `tekitla-issues`
 (`UPSTREAM_ISSUES_ADDR`, gRPC :5000). Las rutas autenticadas (`docs/rutas.md`) aceptan el rol `allowlist`,
 que **no** sale del token: lo otorga `auth.EmailAllowlist` solo a los emails
 verificados de `AUTH_ALLOWED_EMAILS` (vacía = nadie entra). Las de
@@ -23,13 +23,19 @@ estricto que las lecturas autenticadas; en ellas no se lee ninguna credencial). 
 `tks_` como Bearer en cualquier otra ruta es `401`. Sesiones de agentes (issue
 026): `ListAgentSessions` es una lectura más; `ReportSessions` pide **solo**
 `sessions:write` (el recolector local de herdr, con un token de persona; la
-sesión de Firebase no reporta).
+sesión de Firebase no reporta). Repos de GitHub y GitLab (issue 016): `RepositoryService` solo con
+`allowlist`, salvo `ListIssueLinks` (también `issues:read`); los webhooks
+`POST /v1/webhooks/github|gitlab` no son rutas de `routes.yaml`: los atiende
+`app/gateway/webhooks.go` sin credenciales de Tekitla (la firma la verifica
+`tekitla-issues` en el RPC interno `WebhookService/ReceiveWebhook`), con
+bucket propio por IP, 1 MiB y 5 s.
 
 `/mcp` (issue 030, opción `mcp` de la plantilla): seis herramientas de solo
 lectura, `list_projects`, `list_issues`, `get_issue`, `next_issue`,
 `get_flow_metrics` (issue 036, `app/mcptools/flow.go`) y
 `list_agent_sessions` (issue 026, `app/mcptools/sessions.go`; además
-`list_issues` y `get_issue` traen el bloque `sessions`), propias
+`list_issues` y `get_issue` traen el bloque `sessions`; `get_issue`, además,
+el bloque `links` del issue 016, `app/mcptools/links.go`), propias
 del repo (`app/mcptools`) sobre el gancho `app/mcpserver/custom.go`. Cada RPC
 que usan entra al mux con la política de su ruta. Sin escritura en esta fase.
 Detalle: `docs/rutas.md`; clientes: `README.md`.
