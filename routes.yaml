@@ -366,3 +366,75 @@ routes:
     mcp:
       tool: list_agent_sessions
       description: "Sesiones de agentes (de herdr): quién trabaja en qué issue y cómo está (trabajando, esperando-ok, en-reposo, colgado...), y si espera a una persona, a otra sesión o a otra cosa. Filtros: project, issue (RND-236), status, unlinked. Por defecto, solo las activas."
+
+  # --- Issue 016: repos de GitHub y GitLab -----------------------------------
+  # Gestión de conexiones y links: solo la sesión del panel (allowlist), nunca
+  # un token tka_. Leer links también con issues:read (MCP y tk).
+  #
+  # Los webhooks (POST /v1/webhooks/github y /v1/webhooks/gitlab) NO están
+  # acá: los atiende un handler propio (app/gateway/webhooks.go) porque la
+  # firma es sobre el cuerpo crudo. Sin credenciales de Tekitla, bucket propio
+  # por IP (600/min, ráfaga 300), 1 MiB y 5 s; el RPC interno
+  # WebhookService/ReceiveWebhook no tiene google.api.http (no hay ruta REST).
+  # Inventario en docs/rutas.md.
+  issues.v1.RepositoryService/ListConnections:
+    roles: [allowlist]
+
+  issues.v1.RepositoryService/ListRepositories:
+    roles: [allowlist]
+
+  issues.v1.RepositoryService/ListIssueLinks:
+    roles: [allowlist, issues:read]
+
+  # Conectar habla con GitHub (instalación y lista de repos): 30 s y bucket
+  # estricto. Conectar es raro.
+  issues.v1.RepositoryService/ConnectOrganization:
+    roles: [allowlist]
+    timeout: 30s
+    max_body_bytes: 8192
+    rate_limit:
+      per_minute: 10
+      burst: 5
+
+  issues.v1.RepositoryService/UpdateConnection:
+    roles: [allowlist]
+    timeout: 30s
+    max_body_bytes: 8192
+    rate_limit:
+      per_minute: 10
+      burst: 5
+
+  issues.v1.RepositoryService/DisconnectOrganization:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 1024
+    rate_limit:
+      per_minute: 10
+      burst: 5
+
+  # Sincronizar pide los PR abiertos de cada repo: 30 s, por debajo del
+  # HTTP_WRITE_TIMEOUT (35 s). Alcanza para decenas de repos; con cientos
+  # habría que hacerlo en segundo plano.
+  issues.v1.RepositoryService/SyncRepositories:
+    roles: [allowlist]
+    timeout: 30s
+    max_body_bytes: 1024
+    rate_limit:
+      per_minute: 6
+      burst: 2
+
+  issues.v1.RepositoryService/LinkIssue:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 2048
+    rate_limit:
+      per_minute: 30
+      burst: 10
+
+  issues.v1.RepositoryService/UnlinkIssue:
+    roles: [allowlist]
+    timeout: 5s
+    max_body_bytes: 1024
+    rate_limit:
+      per_minute: 30
+      burst: 10

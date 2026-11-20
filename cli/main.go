@@ -25,6 +25,7 @@ import (
 	"github.com/tekitla/tekitla-gateway/app/routes"
 	"github.com/tekitla/tekitla-gateway/app/telemetry"
 	"github.com/tekitla/tekitla-gateway/app/upstream"
+	issuesv1 "github.com/tekitla/tekitla-protos/gen/go/issues/v1"
 	"github.com/tekitla/tekitla-protos/gen/openapi"
 )
 
@@ -132,6 +133,9 @@ func run() error {
 		MCP:              true,
 		Version:          version,
 		MCPTools:         mcptools.Tools(),
+		// Webhooks de GitHub y GitLab (issue 016): RPC interno por la misma
+		// conexión de issues.
+		Webhooks: issuesv1.NewWebhookServiceClient(issuesConn.Conn),
 	})
 	if err != nil {
 		return err

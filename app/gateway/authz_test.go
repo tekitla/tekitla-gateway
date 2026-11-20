@@ -134,6 +134,14 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		"POST /v1/projects/{project_id}/share-links/{share_link_id}:revoke",
 		// Issue 026: sesiones de agentes.
 		"GET /v1/agentSessions", "POST /v1/agentSessions:report",
+		// Issue 016: repos de GitHub y GitLab (los webhooks no son rutas del mux).
+		"GET /v1/projects/{project_id}/connections", "POST /v1/projects/{project_id}/connections",
+		"PATCH /v1/projects/{project_id}/connections/{connection_id}",
+		"POST /v1/projects/{project_id}/connections/{connection_id}:disconnect",
+		"POST /v1/projects/{project_id}/connections/{connection_id}:sync",
+		"GET /v1/projects/{project_id}/repositories", "GET /v1/projects/{project_id}/issueLinks",
+		"POST /v1/projects/{project_id}/issues/{number}/links",
+		"POST /v1/projects/{project_id}/issues/{number}/links/{link_id}:unlink",
 	}
 	// Issue 009: lo único público (lectura por el token de un enlace).
 	wantPublic := []string{"POST /v1/shared/issues:get", "POST /v1/shared/issues:list", "POST /v1/shared/project:get"}
@@ -161,6 +169,9 @@ func TestRutasDeTekitlaExigenAllowlist(t *testing.T) {
 		wantRoles := []string{auth.AllowlistRole}
 		switch {
 		case strings.HasPrefix(b.Method, "issues.v1.ActorService/"), strings.HasPrefix(b.Method, "issues.v1.ShareLinkService/"):
+		case strings.HasPrefix(b.Method, "issues.v1.RepositoryService/") && b.Method != "issues.v1.RepositoryService/ListIssueLinks":
+			// Issue 016: conexiones y links solo desde el panel; un tka_ solo
+			// lee links.
 		case b.Method == "issues.v1.AgentSessionService/ReportSessions":
 			// Solo el recolector: un token de persona con sessions:write. La
 			// sesión de Firebase (allowlist) no reporta.

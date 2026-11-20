@@ -92,7 +92,7 @@ func Tools() []mcpserver.CustomTool {
 				"key":    str("Clave del issue, p. ej. RND-236"),
 				"events": map[string]any{"type": "integer", "minimum": 0, "maximum": maxEvents, "description": "Últimos eventos del historial (10 por defecto)"},
 			}, "key"),
-			Methods: []string{mListProjects, mGetIssue, mListEvents, mListStatuses, mListLabels},
+			Methods: []string{mListProjects, mGetIssue, mListEvents, mListStatuses, mListLabels, mListLinks},
 			Handle:  getIssue,
 			Hint:    hint,
 		},
@@ -329,6 +329,10 @@ type issueDetail struct {
 	// EventsPartial: el historial es más largo de lo que se recorre
 	// (maxEventPages); los eventos que se muestran no son los últimos.
 	EventsPartial bool `json:"events_partial,omitempty"`
+	// Links: ramas y PRs ligados (issue 016), con su CI; ausente si no hay.
+	Links []linkOut `json:"links,omitempty"`
+	// LinksUnavailable: no se pudieron leer los links; el resto vale.
+	LinksUnavailable bool `json:"links_unavailable,omitempty"`
 }
 
 var issueKeyRe = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]{0,8})$`)
@@ -370,6 +374,13 @@ func getIssue(ctx context.Context, c *mcpserver.Caller, args map[string]any) (an
 		CreatedAt:     rfc3339(is.GetCreatedAt()),
 		UpdatedAt:     rfc3339(is.GetUpdatedAt()),
 		Events:        []eventOut{},
+	}
+	// Los links son un bloque extra: si no se pueden leer (servicio sin
+	// RepositoryService, timeout), el issue sale igual, con links_unavailable.
+	if links, lerr := issueLinks(ctx, c, p.GetId(), m[2]); lerr != nil {
+		d.LinksUnavailable = true
+	} else {
+		d.Links = links
 	}
 
 	if nEvents == 0 {
