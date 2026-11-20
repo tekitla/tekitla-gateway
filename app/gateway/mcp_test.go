@@ -211,7 +211,7 @@ func tekitlaFake(method string, raw []byte) (proto.Message, error) {
 			{ProjectId: projRND, IssueNumber: 236, AgentDisplayName: "Claude Code PC-01", SessionName: "round-issue-236",
 				WorkspaceLabel: "round #236", Machine: "PC-01", CwdRel: "round/worktrees/issue-236/front",
 				Status: issuesv1.SessionStatus_SESSION_STATUS_WAITING_OK, WaitingOn: issuesv1.WaitingOn_WAITING_ON_SESSION,
-				WaitingTarget: "tk-worktrees", WaitingText: "⏳ espera a tk-worktrees"},
+				WaitingTarget: "tk-worktrees", WaitingText: "⏳ espera a tk-worktrees", WaitingReason: issuesv1.WaitingReason_WAITING_REASON_DEPLOY},
 			{AgentDisplayName: "Codex PC-01", Machine: "PC-01", CwdRel: ".", Status: issuesv1.SessionStatus_SESSION_STATUS_IDLE},
 		}, Page: &issuesv1.PageResponse{HasNext: true, NextCursor: "c2"}}, nil
 	case "/issues.v1.RepositoryService/ListIssueLinks":
@@ -685,6 +685,7 @@ func TestMCPListAgentSessions(t *testing.T) {
 			Issue, Agent, Status, Cwd string
 			WaitingOn                 string `json:"waiting_on"`
 			WaitingTarget             string `json:"waiting_target"`
+			WaitingReason             string `json:"waiting_reason"`
 		}
 		NextCursor string `json:"next_cursor"`
 	}
@@ -692,7 +693,7 @@ func TestMCPListAgentSessions(t *testing.T) {
 	if len(out.Sessions) != 2 || out.NextCursor != "c2" {
 		t.Fatalf("out = %+v", out)
 	}
-	if s := out.Sessions[0]; s.Issue != "RND-236" || s.Status != "esperando-ok" || s.WaitingOn != "session" || s.WaitingTarget != "tk-worktrees" || s.Cwd != "round/worktrees/issue-236/front" {
+	if s := out.Sessions[0]; s.Issue != "RND-236" || s.Status != "esperando-ok" || s.WaitingOn != "session" || s.WaitingTarget != "tk-worktrees" || s.WaitingReason != "deploy" || s.Cwd != "round/worktrees/issue-236/front" {
 		t.Errorf("sesión 0 = %+v", s)
 	}
 	if s := out.Sessions[1]; s.Issue != "" || s.Status != "en-reposo" {

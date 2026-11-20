@@ -64,6 +64,9 @@ type sessionItem struct {
 	Status        string `json:"status"`
 	WaitingOn     string `json:"waiting_on,omitempty"`
 	WaitingTarget string `json:"waiting_target,omitempty"`
+	// WaitingReason: para qué espera (issue 036): revision, pruebas,
+	// decision o deploy.
+	WaitingReason string `json:"waiting_reason,omitempty"`
 	Since         string `json:"since,omitempty"`
 }
 
@@ -84,6 +87,7 @@ func issueSessions(s *issuesv1.IssueSessions) *sessionsOut {
 			Status:        sessionStatusName[it.GetStatus()],
 			WaitingOn:     waitingOnName[it.GetWaitingOn()],
 			WaitingTarget: it.GetWaitingTarget(),
+			WaitingReason: waitingReasonOut(it.GetWaitingReason()),
 			Since:         rfc3339(it.GetStatusChangedAt()),
 		})
 	}
@@ -123,6 +127,7 @@ type agentSessionOut struct {
 	WaitingOn     string `json:"waiting_on,omitempty"`
 	WaitingTarget string `json:"waiting_target,omitempty"`
 	WaitingText   string `json:"waiting_text,omitempty"`
+	WaitingReason string `json:"waiting_reason,omitempty"`
 	Since         string `json:"since,omitempty"`
 	LastSeen      string `json:"last_seen,omitempty"`
 }
@@ -239,6 +244,7 @@ func listAgentSessions(ctx context.Context, c *mcpserver.Caller, args map[string
 			WaitingOn:     waitingOnName[s.GetWaitingOn()],
 			WaitingTarget: s.GetWaitingTarget(),
 			WaitingText:   s.GetWaitingText(),
+			WaitingReason: waitingReasonOut(s.GetWaitingReason()),
 			Since:         rfc3339(s.GetStatusChangedAt()),
 			LastSeen:      rfc3339(s.GetLastSeenAt()),
 		}
@@ -254,4 +260,12 @@ func listAgentSessions(ctx context.Context, c *mcpserver.Caller, args map[string
 		out.Sessions = append(out.Sessions, o)
 	}
 	return out, nil
+}
+
+// waitingReasonOut: el motivo en palabras; vacío sin motivo.
+func waitingReasonOut(r issuesv1.WaitingReason) string {
+	if r == issuesv1.WaitingReason_WAITING_REASON_UNSPECIFIED {
+		return ""
+	}
+	return reasonName[r]
 }
