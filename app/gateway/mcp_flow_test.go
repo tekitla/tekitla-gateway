@@ -44,6 +44,38 @@ func fakeFlowMetrics(in *issuesv1.GetFlowMetricsRequest) *issuesv1.GetFlowMetric
 		StaleTotal:    2,
 		ValueLabelIds: []string{lblInfra},
 		Coverage:      &issuesv1.FlowCoverage{Issues: 5, DoneWithoutDates: 1},
+		// Parte 3: historia de sesiones desde la segunda semana.
+		SessionsRecordedSince: timestamppb.New(from.AddDate(0, 0, 8)),
+		HiringSignal: &issuesv1.HiringSignal{
+			Verdict: issuesv1.HiringVerdict_HIRING_VERDICT_INSUFFICIENT_DATA, LiveWeeks: 1, WeeksNeeded: 8, WeeksNeededPreliminary: 4,
+		},
+	}
+}
+
+// fakeEfficiency: 3 h trabajando y 5 h esperando a una persona (CU-036-6),
+// 4 h de ellas por una revisión.
+func fakeEfficiency() *issuesv1.FlowEfficiency {
+	bp := int32(3750)
+	return &issuesv1.FlowEfficiency{
+		Working: durationpb.New(3 * time.Hour), WaitingHuman: durationpb.New(5 * time.Hour),
+		Blocked: durationpb.New(0), InReview: durationpb.New(0), Idle: durationpb.New(time.Hour),
+		EfficiencyBp: &bp, Issues: 1,
+		WaitingHumanByReason: []*issuesv1.ReasonTime{
+			{Reason: issuesv1.WaitingReason_WAITING_REASON_REVIEW, Duration: durationpb.New(4 * time.Hour)},
+			{Reason: issuesv1.WaitingReason_WAITING_REASON_UNSPECIFIED, Duration: durationpb.New(time.Hour)},
+		},
+	}
+}
+
+func fakeIssueFlow(in *issuesv1.GetIssueFlowEfficiencyRequest) *issuesv1.GetIssueFlowEfficiencyResponse {
+	if in.GetNumber() != 236 {
+		return &issuesv1.GetIssueFlowEfficiencyResponse{}
+	}
+	return &issuesv1.GetIssueFlowEfficiencyResponse{
+		Efficiency:    fakeEfficiency(),
+		RecordedSince: timestamppb.New(time.Date(2026, 12, 1, 16, 0, 0, 0, time.UTC)),
+		HumanQueue: &issuesv1.HumanQueue{Pending: 1, OldestPending: durationpb.New(90 * time.Minute),
+			ResponseTime: &issuesv1.DurationStats{Count: 1, Median: durationpb.New(2 * time.Hour), P85: durationpb.New(2 * time.Hour)}},
 	}
 }
 
@@ -160,5 +192,95 @@ func TestMCPGetFlowMetricsArgumentosInvalidos(t *testing.T) {
 		if r.method == "/issues.v1.IssueService/GetFlowMetrics" {
 			t.Fatalf("un argumento inválido llegó a GetFlowMetrics")
 		}
+	}
+}
+
+// Parte 3 (CU-036-6): con issue, la eficiencia de ese issue en horas; sin
+// historia, una nota que lo dice. El período y la señal salen en palabras.
+func TestMCPGetFlowMetricsIssue(t *testing.T) {
+	e := newMCPEnv(t)
+	sess := e.mcpSession(e.creds.header("u-1", auth.ScopeIssuesRead))
+
+	var out struct {
+		Project, Issue string
+		RecordedSince  string `json:"recorded_since"`
+		TimeSpent      *struct {
+			WorkingHours      float64            `json:"working_hours"`
+			WaitingHumanHours float64            `json:"waiting_human_hours"`
+			EfficiencyPct     *float64           `json:"efficiency_pct"`
+			ByReason          map[string]float64 `json:"waiting_human_hours_by_reason"`
+		} `json:"time_spent"`
+		HumanQueue *struct {
+			Pending             int
+			OldestPendingHours  *float64 `json:"oldest_pending_hours"`
+			ResponseMedianHours *float64 `json:"response_median_hours"`
+		} `json:"human_queue"`
+		Notes []string
+	}
+	e.callOK(sess, "get_flow_metrics", map[string]any{"project": "RND", "issue": "rnd-236", "from": "2026-12-01"}, &out)
+	var req issuesv1.GetIssueFlowEfficiencyRequest
+	_ = proto.Unmarshal(lastRequest(t, e, "/issues.v1.IssueService/GetIssueFlowEfficiency"), &req)
+	if req.GetProjectId() != projRND || req.GetNumber() != 236 || !req.GetFrom().AsTime().Equal(time.Date(2026, 12, 1, 6, 0, 0, 0, time.UTC)) || req.To != nil {
+		t.Fatalf("request = %v", &req)
+	}
+	ts := out.TimeSpent
+	if out.Issue != "RND-236" || ts == nil || ts.WorkingHours != 3 || ts.WaitingHumanHours != 5 || ts.EfficiencyPct == nil || *ts.EfficiencyPct != 37.5 ||
+		ts.ByReason["revision"] != 4 || ts.ByReason["sin motivo"] != 1 || out.RecordedSince != "2026-12-01" {
+		t.Errorf("CU-036-6: %+v %+v", out, ts)
+	}
+	if q := out.HumanQueue; q == nil || q.Pending != 1 || q.OldestPendingHours == nil || *q.OldestPendingHours != 1.5 ||
+		q.ResponseMedianHours == nil || *q.ResponseMedianHours != 2 {
+		t.Errorf("cola: %+v", q)
+	}
+
+	// Un número suelto y sin historia: sin time_spent, con la nota.
+	out.TimeSpent, out.Notes = nil, nil
+	e.callOK(sess, "get_flow_metrics", map[string]any{"project": "RND", "issue": 7}, &out)
+	if out.TimeSpent != nil || !strings.Contains(strings.Join(out.Notes, " "), "no tiene historia") {
+		t.Errorf("sin historia: %+v", out)
+	}
+	// Un issue de otro proyecto o mal escrito no llega al servicio.
+	for _, bad := range []map[string]any{
+		{"project": "RND", "issue": "TK-3"},
+		{"project": "RND", "issue": "abc"},
+		{"project": "RND", "issue": -2},
+		{"project": "RND", "issue": 236, "labels": []any{"no-existe"}},
+		{"project": "RND", "issue": 236, "stale": 3},
+	} {
+		if res, text := e.callTool(sess, "get_flow_metrics", bad); !res.IsError || !strings.Contains(text, "INVALID_ARGUMENT") {
+			t.Errorf("%v: %s", bad, text)
+		}
+	}
+	for _, r := range e.up.requests() {
+		if r.method == "/issues.v1.IssueService/GetIssueFlowEfficiency" {
+			var got issuesv1.GetIssueFlowEfficiencyRequest
+			_ = proto.Unmarshal(r.raw, &got)
+			if got.GetNumber() == 236 && got.From == nil {
+				t.Fatalf("un issue con labels o stale llegó al servicio: %v", &got)
+			}
+		}
+	}
+}
+
+func TestMCPGetFlowMetricsSesionesYSenal(t *testing.T) {
+	e := newMCPEnv(t)
+	sess := e.mcpSession(e.creds.header("u-1", auth.ScopeIssuesRead))
+	var out struct {
+		SessionsSince string `json:"sessions_recorded_since"`
+		HiringSignal  struct {
+			Verdict, Summary string
+			LiveWeeks        int `json:"live_weeks"`
+			WeeksNeeded      int `json:"weeks_needed"`
+		} `json:"hiring_signal"`
+		Notes []string
+	}
+	e.callOK(sess, "get_flow_metrics", map[string]any{"project": "RND"}, &out)
+	s := out.HiringSignal
+	if out.SessionsSince != "2026-09-15" || s.Verdict != "datos insuficientes" || s.LiveWeeks != 1 || s.WeeksNeeded != 8 ||
+		!strings.Contains(s.Summary, "hay 1 de las 8") {
+		t.Errorf("señal: %+v (desde %s)", s, out.SessionsSince)
+	}
+	if !strings.Contains(strings.Join(out.Notes, " "), "una señal, no una decisión") {
+		t.Errorf("notas: %v", out.Notes)
 	}
 }
